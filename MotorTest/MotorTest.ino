@@ -21,10 +21,10 @@ void setup() {
 void loop() {
 
   //control speed 
-  analogWrite(PWMA, 256);
+  analogWrite(PWMA, 64);
   //control direction 
-  digitalWrite(IN1A, HIGH);
-  digitalWrite(IN2A, LOW);
+  digitalWrite(IN1A, LOW);
+  digitalWrite(IN2A, HIGH);
 /*
   //control speed 
   analogWrite(PWMB, 40);
