@@ -1,18 +1,18 @@
-const int IN1A = 5;
-const int IN2A = 7;
-const int PWMA = 6;
-const int IN1B = 9;
-const int IN2B = 11;
-const int PWMB = 10;
+const int INA_L = A0;
+const int INB_L = A1;
+const int PWM_L = 5;
+const int INA_R = A2;
+const int INB_R = A3;
+const int PWM_R = 6;
 
 void setup() {
 
-  pinMode(IN1A, OUTPUT);
-  pinMode(IN2A, OUTPUT);
-  pinMode(PWMA, OUTPUT);
-  pinMode(IN1B, OUTPUT);
-  pinMode(IN2B, OUTPUT);
-  pinMode(PWMB, OUTPUT);
+  pinMode(INA_L, OUTPUT);
+  pinMode(INB_L, OUTPUT);
+  pinMode(PWM_L, OUTPUT);
+  pinMode(INA_R, OUTPUT);
+  pinMode(INB_R, OUTPUT);
+  pinMode(PWM_R, OUTPUT);
 
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);
@@ -20,15 +20,15 @@ void setup() {
 
 void loop() {
 
-  //control speed 
-  analogWrite(PWMA, 64);
-  //control direction 
-  digitalWrite(IN1A, LOW);
-  digitalWrite(IN2A, HIGH);
-/*
-  //control speed 
-  analogWrite(PWMB, 40);
-  //control direction 
-  digitalWrite(IN1B, HIGH);
-  digitalWrite(IN2B, LOW);*/
+  //control speed
+  analogWrite(PWM_L, 40);
+  //control direction
+  digitalWrite(INA_L, LOW);
+  digitalWrite(INB_L, HIGH);
+
+  //control speed
+  analogWrite(PWM_R, 40);
+  //control direction
+  digitalWrite(INA_R, HIGH);
+  digitalWrite(INB_R, LOW);
 }
