@@ -1,0 +1,10 @@
+Hi, Thanks.  For angle calculation MPU6050 has been used.  To have good angle 
+feedback you need to combine both Gyro and Accelerometer data ( in this case 
+in Complementary filter.) So angle data is passed to balance PID which should 
+maintain the set angle of robot.  To control the movements of the robot , 
+actually we need to control this angle reference point. So to do that there is 
+second controller ( this time PI). It's input value is speed of the motors ( 
+obtained from motor encoders and filtered by Kalman) and it's output is set 
+value of the angle of the robot ( the one that is feed to balance PID as 
+reference point)  So it's a closed loop of two controllers with two filters 
+basically.. Hope it make sense.
