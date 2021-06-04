@@ -4,10 +4,10 @@
 const int ENCODER_A_L = 9;
 const int ENCODER_B_L = 10;
 const int ENCODER_A_R = 11;
-const int ENCODER_B_R = 13;
+const int ENCODER_B_R = A1;
 
-const int INA_L = A0;
-const int INB_L = A1;
+const int INA_L = 7;
+const int INB_L = 8;
 const int PWM_L = 5;
 const int INA_R = A2;
 const int INB_R = A3;
@@ -16,7 +16,7 @@ const int PWM_R = 6;
 //const int MOTOR_SPEEDS[] = { 16, 20, 24, 32, 48, 64, 96, 128, 160, 192, 224, 255 };
 //const int MOTOR_SPEEDS_LENGTH = 12;
 //const int MOTOR_SPEEDS[] = { 8, 12, 16, 20, 24, 32 };
-const int MOTOR_SPEEDS[] = { 7, 8, 9, 10, 16, 20, 24, 32 };
+const int MOTOR_SPEEDS[] = { 8, 12, 16, 20, 24, 32, 48 };
 const int MOTOR_SPEEDS_LENGTH = 8;
 const int LOOP_MICROS = 1000000;
 
@@ -81,8 +81,8 @@ void loop() {
   }
 
   // Deadband left: 11-12, right: 9-10
-  int speed = 12;
-  //int speed = MOTOR_SPEEDS[speedIndex];
+  //int speed = 12;
+  int speed = -MOTOR_SPEEDS[speedIndex];
   speedLoopCount++;
   if (speedLoopCount >= 10) {
     speedIndex++;

@@ -21,19 +21,22 @@ IMUData internalData;
 IMUData externalData;
 
 void setup() {
-  Serial.begin(115200);
-  while (!Serial); // Nano 33 will lose initial output without this
+  //Serial.begin(115200);
+  //while (!Serial); // Nano 33 will lose initial output without this
   Serial1.begin(115200);
 
-  Serial.println("Initializing IMU...");
-
-  if (!IMU.begin()) {
-    Serial.println("Failed to initialize internal IMU!");
-    while (1);
-  }
+  //Serial.println("Initializing IMU...");
 
   // initialize digital pin LED_BUILTIN as an output.
   pinMode(LED_BUILTIN, OUTPUT);
+
+  if (!IMU.begin()) {
+    //Serial.println("Failed to initialize internal IMU!");
+    while (1) {
+      digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+      delay(500);
+    }
+  }
 
   //Serial.println("Measuring internal IMU calibration values...");
   float gxSum = 0;
@@ -101,10 +104,10 @@ void loop() {
     IMU.readAcceleration(ax, ay, az);
 
     // Calculate the current pitch angle in degrees according to the accelerometer
-    //float accelAngleX = atan(ay / sqrt(pow(ax, 2) + pow(az, 2))) * RADIANS_TO_DEGREES;
-    float accelAngleY = atan(-1 * ax / sqrt(pow(ay, 2) + pow(az, 2))) * RADIANS_TO_DEGREES;
+    float accelAngleX = atan(ay / sqrt(pow(ax, 2) + pow(az, 2))) * RADIANS_TO_DEGREES;
+    //float accelAngleY = atan(-1 * ax / sqrt(pow(ay, 2) + pow(az, 2))) * RADIANS_TO_DEGREES;
 
-    float pitchAccelerometer = accelAngleY;
+    float pitchAccelerometer = accelAngleX;
 
     Serial1.print("ipa:");
     Serial1.print(pitchAccelerometer);
@@ -115,7 +118,8 @@ void loop() {
     IMU.readGyroscope(gx, gy, gz);
 
     // Apply calibration value
-    gy -= internalData.gyroYCalibration;
+    gx -= internalData.gyroXCalibration;
+    //gy -= internalData.gyroYCalibration;
 
     long currentMicros = micros();
     float dt = (currentMicros - lastInternalMesaurementMicros) / 1000000.0;
@@ -123,7 +127,7 @@ void loop() {
 
     // Calculate the angle in degrees traveled during this loop angle
     // (Gyroscope Angle) = (Last Measured Filtered Angle) + ω×Δt
-    float pitchGyro = internalData.pitchReading + gy * dt;
+    float pitchGyro = internalData.pitchReading + gx * dt;
 
     // Complementary filter to combine the gyro and accelerometer angle
     // Filtered Angle = α × (Gyroscope Angle) + (1 − α) × (Accelerometer Angle)
@@ -135,9 +139,6 @@ void loop() {
   }
 
   // The external IMU angle calculations are tuned for a loop time of 4 milliseconds
-  long delayTime = loopEndTime - micros();
-  if (delayTime > 0) {
-    delayMicroseconds(delayTime); // Simulate the main program loop time
-  }
+  while(loopEndTime > micros());
   loopEndTime = micros() + LOOP_MICROS;
 }

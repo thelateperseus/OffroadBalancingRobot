@@ -1,5 +1,5 @@
-const int INA_L = A0;
-const int INB_L = A1;
+const int INA_L = 7;
+const int INB_L = 8;
 const int PWM_L = 5;
 const int INA_R = A2;
 const int INB_R = A3;
