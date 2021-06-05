@@ -97,7 +97,7 @@ bool PID::Compute()
  ******************************************************************************/
 void PID::SetTunings(double Kp, double Ki, double Kd, int POn)
 {
-  if (Kp < 0 || Ki < 0 || Kd < 0) return;
+  //if (Kp < 0 || Ki < 0 || Kd < 0) return;
 
   pOn = POn;
   pOnE = POn == P_ON_E;

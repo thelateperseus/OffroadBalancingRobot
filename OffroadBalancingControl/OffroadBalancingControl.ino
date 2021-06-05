@@ -1,3 +1,4 @@
+#include "SerialCommand.h"
 #include "LSM6DS3.h"
 #include "PID_v1.h"
 #include <SAMD21turboPWM.h>
@@ -30,12 +31,19 @@ IMUData imuData;
 
 boolean started = false;
 
-double pitchSetPoint = -0.5;
+const double PITCH_OFFSET = -0.5;
+
+double kp = 20;
+double ki = 450;
+double kd = 0.5;
+double pitchSetPoint = PITCH_OFFSET;
 double pitchReading = 0;
 double pitchPidOutput = 0;
-PID pitchPid(&pitchReading, &pitchPidOutput, &pitchSetPoint, 10, 0, 0, REVERSE);
+PID pitchPid(&pitchReading, &pitchPidOutput, &pitchSetPoint, kp, ki, kd, REVERSE);
 
 TurboPWM pwm;
+
+SerialCommand cmd;
 
 /*---------
     Setup
@@ -95,10 +103,38 @@ void calibrateIMU() {
   // 12:39:01.706 -> Internal IMU calibration complete, gx: 0.91, gy: -3.77, gz: -4.53, ax: 0.03, ay: 0.01, az: 0.99
 }
 
+void setKp() {
+  char* arg = cmd.next();
+  if (arg != NULL) {
+    kp = atof(arg);
+    pitchPid.SetTunings(kp, ki, kd);
+  }
+}
+
+void setKi() {
+  char* arg = cmd.next();
+  if (arg != NULL) {
+    ki = atof(arg);
+    pitchPid.SetTunings(kp, ki, kd);
+  }
+}
+
+void setKd() {
+  char* arg = cmd.next();
+  if (arg != NULL) {
+    kd = atof(arg);
+    pitchPid.SetTunings(kp, ki, kd);
+  }
+}
+
 void setup() {
-  Serial.begin(115200);
-  while (!Serial); // Nano 33 will lose initial output without this
+  //Serial.begin(115200);
+  //while (!Serial); // Nano 33 will lose initial output without this
   Serial1.begin(115200);
+
+  cmd.addCommand("kp", setKp);
+  cmd.addCommand("ki", setKi);
+  cmd.addCommand("kd", setKd);
 
   //Serial.println("Initializing IMU...");
 
@@ -145,7 +181,7 @@ void setup() {
 
 void reset() {
   pitchReading = 0;
-  pitchSetPoint = 0.5;
+  pitchSetPoint = PITCH_OFFSET;
   pitchPidOutput = 0;
   started = false;
   pitchPid.SetMode(MANUAL);
@@ -188,6 +224,8 @@ void computePitch() {
 }
 
 void loop() {
+  cmd.readSerial(&Serial1);
+
   if (IMU.accelerationAvailable() && IMU.gyroscopeAvailable()) {
     computePitch();
     /*Serial1.print("p:");
@@ -196,7 +234,9 @@ void loop() {
   }
 
   // Start balancing when angle is close to zero
-  if (!started && imuData.pitchAccelerometer > -1.5 && imuData.pitchAccelerometer < 0.5) {
+  if (!started
+      && imuData.pitchAccelerometer > -1.0 + PITCH_OFFSET
+      && imuData.pitchAccelerometer < 1.0 + PITCH_OFFSET) {
     imuData.pitchReading = imuData.pitchAccelerometer;
     started = true;
     pitchPid.SetMode(AUTOMATIC);
@@ -211,14 +251,23 @@ void loop() {
     speedLeft = pitchPidOutput;
     speedRight = pitchPidOutput;
 
-    Serial.print("p:");
-    Serial.print(pitchReading);
-    Serial.print(", s:");
-    Serial.print(pitchPidOutput);
-    Serial.println();
+    Serial1.print("sp:");
+    Serial1.print(pitchSetPoint);
+    Serial1.print(", pv:");
+    Serial1.print(pitchReading);
+    //Serial1.print(", o:");
+    //Serial1.print(pitchPidOutput);
+    Serial1.println();
 
-    if (pitchReading > 45 || pitchReading < -45 ||
-        imuData.pitchAccelerometer > 45 || imuData.pitchAccelerometer < -45) {
+    // Automatic balance point correction
+    if (pitchPidOutput < -10) {
+      pitchSetPoint += 0.002;
+    }
+    if (pitchPidOutput > 10) {
+      pitchSetPoint -= 0.002;
+    }
+
+    if (pitchReading > 45 || pitchReading < -45) {
       speedLeft = 0;
       speedRight = 0;
       reset();
