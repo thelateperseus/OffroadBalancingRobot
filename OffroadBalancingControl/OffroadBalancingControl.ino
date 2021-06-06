@@ -32,10 +32,11 @@ IMUData imuData;
 boolean started = false;
 
 const double PITCH_OFFSET = -0.5;
+double motorDeadBand = 30;
 
-double kp = 20;
-double ki = 450;
-double kd = 0.5;
+double kp = 40;
+double ki = 800;
+double kd = 3;
 double pitchSetPoint = PITCH_OFFSET;
 double pitchReading = 0;
 double pitchPidOutput = 0;
@@ -127,6 +128,13 @@ void setKd() {
   }
 }
 
+void setDeadband() {
+  char* arg = cmd.next();
+  if (arg != NULL) {
+    motorDeadBand = atof(arg);
+  }
+}
+
 void setup() {
   //Serial.begin(115200);
   //while (!Serial); // Nano 33 will lose initial output without this
@@ -135,6 +143,7 @@ void setup() {
   cmd.addCommand("kp", setKp);
   cmd.addCommand("ki", setKi);
   cmd.addCommand("kd", setKd);
+  cmd.addCommand("db", setDeadband);
 
   //Serial.println("Initializing IMU...");
 
@@ -220,7 +229,7 @@ void computePitch() {
 
   // Complementary filter to combine the gyro and accelerometer angle
   // Filtered Angle = α × (Gyroscope Angle) + (1 − α) × (Accelerometer Angle)
-  imuData.pitchReading = 0.96 * pitchGyro + 0.04 * imuData.pitchAccelerometer;
+  imuData.pitchReading = 0.996 * pitchGyro + 0.004 * imuData.pitchAccelerometer;
 }
 
 void loop() {
@@ -248,15 +257,17 @@ void loop() {
   if (started) {
     pitchReading = imuData.pitchReading;
     pitchPid.Compute();
-    speedLeft = pitchPidOutput;
-    speedRight = pitchPidOutput;
+    if (pitchPidOutput >= motorDeadBand || pitchPidOutput <= -motorDeadBand) {
+      speedLeft = pitchPidOutput;
+      speedRight = pitchPidOutput;
+    }
 
     Serial1.print("sp:");
     Serial1.print(pitchSetPoint);
     Serial1.print(", pv:");
     Serial1.print(pitchReading);
-    //Serial1.print(", o:");
-    //Serial1.print(pitchPidOutput);
+    Serial1.print(", o:");
+    Serial1.print(pitchPidOutput);
     Serial1.println();
 
     // Automatic balance point correction
@@ -273,6 +284,9 @@ void loop() {
       reset();
     }
   }
+
+  speedLeft = constrain(speedLeft, -1000, 1000);
+  speedRight = constrain(speedRight, -1000, 1000);
 
   pwm.analogWrite(PWM_L, abs(speedLeft));
   digitalWrite(INA_L, speedLeft > 0 ? LOW : HIGH);

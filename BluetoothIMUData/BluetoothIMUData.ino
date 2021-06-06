@@ -131,7 +131,7 @@ void loop() {
 
     // Complementary filter to combine the gyro and accelerometer angle
     // Filtered Angle = α × (Gyroscope Angle) + (1 − α) × (Accelerometer Angle)
-    internalData.pitchReading = 0.96 * pitchGyro + 0.04 * pitchAccelerometer;
+    internalData.pitchReading = 0.996 * pitchGyro + 0.004 * pitchAccelerometer;
 
     Serial1.print("ipc:");
     Serial1.print(internalData.pitchReading);
