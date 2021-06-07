@@ -16,8 +16,8 @@ const int PWM_R = 6;
 //const int MOTOR_SPEEDS[] = { 16, 20, 24, 32, 48, 64, 96, 128, 160, 192, 224, 255 };
 //const int MOTOR_SPEEDS_LENGTH = 12;
 //const int MOTOR_SPEEDS[] = { 8, 12, 16, 20, 24, 32 };
-const int MOTOR_SPEEDS[] = { 8, 12, 16, 20, 24, 32, 48 };
-const int MOTOR_SPEEDS_LENGTH = 8;
+const int MOTOR_SPEEDS[] = { 62, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65 };
+const int MOTOR_SPEEDS_LENGTH = 16;
 const int LOOP_MICROS = 1000000;
 
 long loopEndTime = 0;
@@ -81,10 +81,10 @@ void loop() {
   }
 
   // Deadband left: 11-12, right: 9-10
-  //int speed = 12;
-  int speed = -MOTOR_SPEEDS[speedIndex];
+  //int speed = 62;
+  int speed = MOTOR_SPEEDS[speedIndex];
   speedLoopCount++;
-  if (speedLoopCount >= 10) {
+  if (speedLoopCount >= 5) {
     speedIndex++;
     speedLoopCount = 0;
   }

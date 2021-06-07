@@ -31,12 +31,12 @@ IMUData imuData;
 
 boolean started = false;
 
-const double PITCH_OFFSET = -0.5;
-double motorDeadBand = 30;
+const double PITCH_OFFSET = -0.2;
+double motorDeadBand = 56;
 
-double kp = 40;
-double ki = 800;
-double kd = 3;
+double kp = 50;
+double ki = 150;
+double kd = 0.5;
 double pitchSetPoint = PITCH_OFFSET;
 double pitchReading = 0;
 double pitchPidOutput = 0;
@@ -251,16 +251,15 @@ void loop() {
     pitchPid.SetMode(AUTOMATIC);
   }
 
-  double speedLeft = 0;
-  double speedRight = 0;
-
   if (started) {
     pitchReading = imuData.pitchReading;
     pitchPid.Compute();
-    if (pitchPidOutput >= motorDeadBand || pitchPidOutput <= -motorDeadBand) {
-      speedLeft = pitchPidOutput;
-      speedRight = pitchPidOutput;
-    }
+    double speedLeft = pitchPidOutput;
+    double speedRight = pitchPidOutput;
+    boolean directionLeft = speedLeft > 0;
+    boolean directionRight = speedRight > 0;
+    speedLeft = map(abs(speedLeft), 0.0, 1000.0, motorDeadBand, 1000.0);
+    speedRight = map(abs(speedRight), 0.0, 1000.0, motorDeadBand, 1000.0);
 
     Serial1.print("sp:");
     Serial1.print(pitchSetPoint);
@@ -268,6 +267,8 @@ void loop() {
     Serial1.print(pitchReading);
     Serial1.print(", o:");
     Serial1.print(pitchPidOutput);
+    Serial1.print(", s:");
+    Serial1.print(speedLeft);
     Serial1.println();
 
     // Automatic balance point correction
@@ -283,17 +284,25 @@ void loop() {
       speedRight = 0;
       reset();
     }
+
+    speedLeft = constrain(speedLeft, -1000, 1000);
+    speedRight = constrain(speedRight, -1000, 1000);
+
+    pwm.analogWrite(PWM_L, speedLeft);
+    digitalWrite(INA_L, directionLeft ? LOW : HIGH);
+    digitalWrite(INB_L, directionLeft ? HIGH : LOW);
+    pwm.analogWrite(PWM_R, speedRight);
+    digitalWrite(INA_R, directionRight > 0 ? HIGH : LOW);
+    digitalWrite(INB_R, directionRight > 0 ? LOW : HIGH);
+
+  } else {
+    pwm.analogWrite(PWM_L, 0);
+    digitalWrite(INA_L, LOW);
+    digitalWrite(INB_L, LOW);
+    pwm.analogWrite(PWM_R, 0);
+    digitalWrite(INA_R, LOW);
+    digitalWrite(INB_R, LOW);
   }
-
-  speedLeft = constrain(speedLeft, -1000, 1000);
-  speedRight = constrain(speedRight, -1000, 1000);
-
-  pwm.analogWrite(PWM_L, abs(speedLeft));
-  digitalWrite(INA_L, speedLeft > 0 ? LOW : HIGH);
-  digitalWrite(INB_L, speedLeft > 0 ? HIGH : LOW);
-  pwm.analogWrite(PWM_R, abs(speedRight));
-  digitalWrite(INA_R, speedRight > 0 ? HIGH : LOW);
-  digitalWrite(INB_R, speedRight > 0 ? LOW : HIGH);
 
   while (loopEndTime > micros());
   loopEndTime = micros() + LOOP_MICROS;

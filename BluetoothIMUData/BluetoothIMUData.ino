@@ -21,8 +21,8 @@ IMUData internalData;
 IMUData externalData;
 
 void setup() {
-  //Serial.begin(115200);
-  //while (!Serial); // Nano 33 will lose initial output without this
+  Serial.begin(115200);
+  while (!Serial); // Nano 33 will lose initial output without this
   Serial1.begin(115200);
 
   //Serial.println("Initializing IMU...");
@@ -109,9 +109,9 @@ void loop() {
 
     float pitchAccelerometer = accelAngleX;
 
-    Serial1.print("ipa:");
-    Serial1.print(pitchAccelerometer);
-    Serial1.print(", ");
+    Serial.print("ipa:");
+    Serial.print(pitchAccelerometer);
+    Serial.print(", ");
 
     // Read gyro values
     float gx, gy, gz;
@@ -133,9 +133,9 @@ void loop() {
     // Filtered Angle = α × (Gyroscope Angle) + (1 − α) × (Accelerometer Angle)
     internalData.pitchReading = 0.996 * pitchGyro + 0.004 * pitchAccelerometer;
 
-    Serial1.print("ipc:");
-    Serial1.print(internalData.pitchReading);
-    Serial1.println();
+    Serial.print("ipc:");
+    Serial.print(internalData.pitchReading);
+    Serial.println();
   }
 
   // The external IMU angle calculations are tuned for a loop time of 4 milliseconds
