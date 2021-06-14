@@ -34,8 +34,8 @@ boolean started = false;
 const double PITCH_OFFSET = -0.2;
 double motorDeadBand = 56;
 
-double kp = 50;
-double ki = 150;
+double kp = 30; // 50
+double ki = 120; // 150
 double kd = 0.5;
 double pitchSetPoint = PITCH_OFFSET;
 double pitchReading = 0;
@@ -175,7 +175,7 @@ void setup() {
 
   calibrateIMU();
 
-  pitchPid.SetSampleTime(4);
+  pitchPid.SetSampleTime(LOOP_MICROS/1000);
   pitchPid.SetOutputLimits(-1000, 1000);
 
   reset();
@@ -254,12 +254,12 @@ void loop() {
   if (started) {
     pitchReading = imuData.pitchReading;
     pitchPid.Compute();
-    double speedLeft = pitchPidOutput;
-    double speedRight = pitchPidOutput;
-    boolean directionLeft = speedLeft > 0;
-    boolean directionRight = speedRight > 0;
-    speedLeft = map(abs(speedLeft), 0.0, 1000.0, motorDeadBand, 1000.0);
-    speedRight = map(abs(speedRight), 0.0, 1000.0, motorDeadBand, 1000.0);
+    double pwmLeft = pitchPidOutput;
+    double pwmRight = pitchPidOutput;
+    boolean directionLeft = pwmLeft > 0;
+    boolean directionRight = pwmRight > 0;
+    pwmLeft = map(abs(pwmLeft), 0.0, 1000.0, motorDeadBand + 2, 1000.0);
+    pwmRight = map(abs(pwmRight), 0.0, 1000.0, motorDeadBand, 1000.0);
 
     Serial1.print("sp:");
     Serial1.print(pitchSetPoint);
@@ -268,7 +268,7 @@ void loop() {
     Serial1.print(", o:");
     Serial1.print(pitchPidOutput);
     Serial1.print(", s:");
-    Serial1.print(speedLeft);
+    Serial1.print(pwmLeft);
     Serial1.println();
 
     // Automatic balance point correction
@@ -280,18 +280,18 @@ void loop() {
     }
 
     if (pitchReading > 45 || pitchReading < -45) {
-      speedLeft = 0;
-      speedRight = 0;
+      pwmLeft = 0;
+      pwmRight = 0;
       reset();
     }
 
-    speedLeft = constrain(speedLeft, -1000, 1000);
-    speedRight = constrain(speedRight, -1000, 1000);
+    pwmLeft = constrain(pwmLeft, -1000, 1000);
+    pwmRight = constrain(pwmRight, -1000, 1000);
 
-    pwm.analogWrite(PWM_L, speedLeft);
+    pwm.analogWrite(PWM_L, pwmLeft);
     digitalWrite(INA_L, directionLeft ? LOW : HIGH);
     digitalWrite(INB_L, directionLeft ? HIGH : LOW);
-    pwm.analogWrite(PWM_R, speedRight);
+    pwm.analogWrite(PWM_R, pwmRight);
     digitalWrite(INA_R, directionRight > 0 ? HIGH : LOW);
     digitalWrite(INB_R, directionRight > 0 ? LOW : HIGH);
 
