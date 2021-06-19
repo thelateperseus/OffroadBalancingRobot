@@ -1,13 +1,19 @@
-#include "SerialCommand.h"
+#include "Encoder.h"
 #include "LSM6DS3.h"
 #include "PID_v1.h"
 #include <SAMD21turboPWM.h>
+#include "SerialCommand.h"
 
 const int LOOP_MICROS = 4000;
 long loopEndTime = 0;
-long lastInternalMesaurementMicros = 0;
+long lastImuMesaurementMicros = 0;
 
 const float RADIANS_TO_DEGREES = 57.296;
+
+const int ENCODER_A_L = 9;
+const int ENCODER_B_L = 10;
+const int ENCODER_A_R = 11;
+const int ENCODER_B_R = A1;
 
 const int INA_L = 7;
 const int INB_L = 8;
@@ -42,7 +48,14 @@ double pitchReading = 0;
 double pitchPidOutput = 0;
 PID pitchPid(&pitchReading, &pitchPidOutput, &pitchSetPoint, kp, ki, kd, REVERSE);
 
+double directionSetPoint = 0;
+double directionReading = 0;
+double directionPidOutput = 0;
+PID directionPid(&directionReading, &directionPidOutput, &directionSetPoint, 0.1, 0, 0, DIRECT);
+
 TurboPWM pwm;
+Encoder encoderLeft(ENCODER_A_L, ENCODER_B_L);
+Encoder encoderRight(ENCODER_A_R, ENCODER_B_R);
 
 SerialCommand cmd;
 
@@ -77,7 +90,7 @@ void calibrateIMU() {
 
     while (!IMU.accelerationAvailable() && !IMU.gyroscopeAvailable());
   }
-  lastInternalMesaurementMicros = micros();
+  lastImuMesaurementMicros = micros();
   // Get the average from the 500 readings
   imuData.gyroXCalibration = gxSum / 500;
   imuData.gyroYCalibration = gySum / 500;
@@ -135,6 +148,22 @@ void setDeadband() {
   }
 }
 
+void encoderLeftInterruptA() {
+  encoderLeft.encoderInterruptA();
+}
+
+void encoderLeftInterruptB() {
+  encoderLeft.encoderInterruptB();
+}
+
+void encoderRightInterruptA() {
+  encoderRight.encoderInterruptA();
+}
+
+void encoderRightInterruptB() {
+  encoderRight.encoderInterruptB();
+}
+
 void setup() {
   //Serial.begin(115200);
   //while (!Serial); // Nano 33 will lose initial output without this
@@ -157,6 +186,11 @@ void setup() {
   pinMode(INB_R, OUTPUT);
   pinMode(PWM_R, OUTPUT);
 
+  attachInterrupt(digitalPinToInterrupt(ENCODER_A_L), encoderLeftInterruptA, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(ENCODER_B_L), encoderLeftInterruptB, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(ENCODER_A_R), encoderRightInterruptA, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(ENCODER_B_R), encoderRightInterruptB, CHANGE);
+
   // Turbo = false
   pwm.setClockDivider(1, false);
   // For the Arduino Nano 33 IoT, you need to initialise timer 1 for pins 4 and 7, timer 0 for pins 5, 6, 8, and 12, and timer 2 for pins 11 and 13;
@@ -177,6 +211,8 @@ void setup() {
 
   pitchPid.SetSampleTime(LOOP_MICROS/1000);
   pitchPid.SetOutputLimits(-1000, 1000);
+  directionPid.SetSampleTime(LOOP_MICROS/1000);
+  directionPid.SetOutputLimits(-15, 15);
 
   reset();
 
@@ -194,6 +230,7 @@ void reset() {
   pitchPidOutput = 0;
   started = false;
   pitchPid.SetMode(MANUAL);
+  directionPid.SetMode(MANUAL);
 }
 
 void computePitch() {
@@ -216,12 +253,12 @@ void computePitch() {
   IMU.readGyroscope(gx, gy, gz);
 
   // Apply calibration value
-  gx -= imuData.gyroXCalibration;
+  //gx -= imuData.gyroXCalibration;
   //gy -= imuData.gyroYCalibration;
 
   long currentMicros = micros();
-  float dt = (currentMicros - lastInternalMesaurementMicros) / 1000000.0;
-  lastInternalMesaurementMicros = currentMicros;
+  float dt = (currentMicros - lastImuMesaurementMicros) / 1000000.0;
+  lastImuMesaurementMicros = currentMicros;
 
   // Calculate the angle in degrees traveled during this loop angle
   // (Gyroscope Angle) = (Last Measured Filtered Angle) + ω×Δt
@@ -249,6 +286,9 @@ void loop() {
     imuData.pitchReading = imuData.pitchAccelerometer;
     started = true;
     pitchPid.SetMode(AUTOMATIC);
+    directionPid.SetMode(AUTOMATIC);
+    encoderLeft.resetValue();
+    encoderRight.resetValue();
   }
 
   if (started) {
@@ -256,19 +296,31 @@ void loop() {
     pitchPid.Compute();
     double pwmLeft = pitchPidOutput;
     double pwmRight = pitchPidOutput;
+
+    long encoderLeftValue = encoderLeft.getValue();
+    long encoderRightValue = -encoderRight.getValue();
+    directionReading = encoderLeftValue - encoderRightValue;
+    directionPid.Compute();
+    pwmLeft += directionPidOutput;
+    pwmRight -= directionPidOutput;
+
     boolean directionLeft = pwmLeft > 0;
     boolean directionRight = pwmRight > 0;
-    pwmLeft = map(abs(pwmLeft), 0.0, 1000.0, motorDeadBand + 2, 1000.0);
+    pwmLeft = map(abs(pwmLeft), 0.0, 1000.0, motorDeadBand + 1, 1000.0);
     pwmRight = map(abs(pwmRight), 0.0, 1000.0, motorDeadBand, 1000.0);
 
     Serial1.print("sp:");
     Serial1.print(pitchSetPoint);
     Serial1.print(", pv:");
     Serial1.print(pitchReading);
-    Serial1.print(", o:");
+    /*Serial1.print(", o:");
     Serial1.print(pitchPidOutput);
     Serial1.print(", s:");
-    Serial1.print(pwmLeft);
+    Serial1.print(pwmLeft);*/
+    Serial1.print(", l:");
+    Serial1.print(encoderLeftValue);
+    Serial1.print(", r:");
+    Serial1.print(encoderRightValue);
     Serial1.println();
 
     // Automatic balance point correction
