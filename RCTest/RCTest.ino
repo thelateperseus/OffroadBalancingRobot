@@ -28,6 +28,7 @@ void channel2Interrupt() {
 
 void setup() {
   Serial.begin(115200);
+  while(!Serial);
   pinMode(CHANNEL1_PIN, INPUT);
   pinMode(CHANNEL2_PIN, INPUT);
   attachInterrupt(digitalPinToInterrupt(CHANNEL1_PIN), channel1Interrupt, CHANGE);

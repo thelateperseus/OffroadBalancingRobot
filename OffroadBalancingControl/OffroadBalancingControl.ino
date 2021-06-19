@@ -4,6 +4,45 @@
 #include <SAMD21turboPWM.h>
 #include "SerialCommand.h"
 
+/*---------
+    Encoder Speed Filter
+  ---------*/
+
+// Low pass butterworth filter order=2 alpha1=0.2
+class  FilterBuLp2
+{
+  public:
+    FilterBuLp2()
+    {
+      this -> reset();
+    }
+  private:
+    double v[3];
+  public:
+    double step(double x) //class II
+    {
+      v[0] = v[1];
+      v[1] = v[2];
+      v[2] = (1.335920002785651040e-2 * x)
+         + (-0.70089678118840259557 * v[0])
+         + (1.64745998107697655399 * v[1]);
+      return
+        (v[0] + v[2])
+        + 2 * v[1];
+    }
+
+    void reset()
+    {
+      v[0] = 0.0;
+      v[1] = 0.0;
+      v[2] = 0.0;      
+    }
+};
+
+/*---------
+    More constants than physics
+  ---------*/
+
 const int LOOP_MICROS = 4000;
 long loopEndTime = 0;
 long lastImuMesaurementMicros = 0;
@@ -21,6 +60,9 @@ const int PWM_L = 5;
 const int INA_R = A2;
 const int INB_R = A3;
 const int PWM_R = 6;
+
+const int RC_CHANNEL1_PIN = 2;
+const int RC_CHANNEL2_PIN = 3;
 
 struct IMUData {
   float gyroXCalibration = 0;
@@ -40,24 +82,44 @@ boolean started = false;
 const double PITCH_OFFSET = -0.2;
 double motorDeadBand = 56;
 
-double kp = 30; // 50
-double ki = 120; // 150
-double kd = 0.5;
+long encoderLeftValue;
+long encoderRightValue;
+
+double kps = 0.08;
+double kis = 0.5;
+double kds = 0;
+double speedSetPoint = 0;
+double filteredSpeed = 0;
+double speedPidOutput = 0;
+PID speedPid(&filteredSpeed, &speedPidOutput, &speedSetPoint, kps, kis, kds, DIRECT);
+
+double kpp = 30; // 50
+double kip = 120; // 150
+double kdp = 0.5;
 double pitchSetPoint = PITCH_OFFSET;
 double pitchReading = 0;
 double pitchPidOutput = 0;
-PID pitchPid(&pitchReading, &pitchPidOutput, &pitchSetPoint, kp, ki, kd, REVERSE);
+PID pitchPid(&pitchReading, &pitchPidOutput, &pitchSetPoint, kpp, kip, kdp, REVERSE);
 
+double kpd = 0.1;
+double kid = 0;
+double kdd = 0;
 double directionSetPoint = 0;
 double directionReading = 0;
 double directionPidOutput = 0;
-PID directionPid(&directionReading, &directionPidOutput, &directionSetPoint, 0.1, 0, 0, DIRECT);
+PID directionPid(&directionReading, &directionPidOutput, &directionSetPoint, kpd, kid, kdd, DIRECT);
 
 TurboPWM pwm;
 Encoder encoderLeft(ENCODER_A_L, ENCODER_B_L);
 Encoder encoderRight(ENCODER_A_R, ENCODER_B_R);
+FilterBuLp2 speedFilter;
 
 SerialCommand cmd;
+
+volatile unsigned long rcChannel1PulseStart = 0;
+volatile unsigned long rcChannel1PulseDuration = 0;
+volatile unsigned long rcChannel2PulseStart = 0;
+volatile unsigned long rcChannel2PulseDuration = 0;
 
 /*---------
     Setup
@@ -117,27 +179,51 @@ void calibrateIMU() {
   // 12:39:01.706 -> Internal IMU calibration complete, gx: 0.91, gy: -3.77, gz: -4.53, ax: 0.03, ay: 0.01, az: 0.99
 }
 
-void setKp() {
+void setKpp() {
   char* arg = cmd.next();
   if (arg != NULL) {
-    kp = atof(arg);
-    pitchPid.SetTunings(kp, ki, kd);
+    kpp = atof(arg);
+    pitchPid.SetTunings(kpp, kip, kdp);
   }
 }
 
-void setKi() {
+void setKip() {
   char* arg = cmd.next();
   if (arg != NULL) {
-    ki = atof(arg);
-    pitchPid.SetTunings(kp, ki, kd);
+    kip = atof(arg);
+    pitchPid.SetTunings(kpp, kip, kdp);
   }
 }
 
-void setKd() {
+void setKdp() {
   char* arg = cmd.next();
   if (arg != NULL) {
-    kd = atof(arg);
-    pitchPid.SetTunings(kp, ki, kd);
+    kdp = atof(arg);
+    pitchPid.SetTunings(kpp, kip, kdp);
+  }
+}
+
+void setKps() {
+  char* arg = cmd.next();
+  if (arg != NULL) {
+    kps = atof(arg);
+    speedPid.SetTunings(kps, kis, kds);
+  }
+}
+
+void setKis() {
+  char* arg = cmd.next();
+  if (arg != NULL) {
+    kis = atof(arg);
+    speedPid.SetTunings(kps, kis, kds);
+  }
+}
+
+void setKds() {
+  char* arg = cmd.next();
+  if (arg != NULL) {
+    kds = atof(arg);
+    speedPid.SetTunings(kps, kis, kds);
   }
 }
 
@@ -164,14 +250,37 @@ void encoderRightInterruptB() {
   encoderRight.encoderInterruptB();
 }
 
+void rcChannel1Interrupt() {
+  boolean rcChannel1 = digitalRead(RC_CHANNEL1_PIN);
+  unsigned long now = micros();
+  if (rcChannel1) {
+    rcChannel1PulseStart = now;
+  } else {
+    rcChannel1PulseDuration = now - rcChannel1PulseStart;
+  }
+}
+
+void rcChannel2Interrupt() {
+  boolean rcChannel2 = digitalRead(RC_CHANNEL2_PIN);
+  unsigned long now = micros();
+  if (rcChannel2) {
+    rcChannel2PulseStart = now;
+  } else {
+    rcChannel2PulseDuration = now - rcChannel2PulseStart;
+  }
+}
+
 void setup() {
   //Serial.begin(115200);
   //while (!Serial); // Nano 33 will lose initial output without this
   Serial1.begin(115200);
 
-  cmd.addCommand("kp", setKp);
-  cmd.addCommand("ki", setKi);
-  cmd.addCommand("kd", setKd);
+  cmd.addCommand("kpp", setKpp);
+  cmd.addCommand("kip", setKip);
+  cmd.addCommand("kdp", setKdp);
+  cmd.addCommand("kps", setKps);
+  cmd.addCommand("kis", setKis);
+  cmd.addCommand("kds", setKds);
   cmd.addCommand("db", setDeadband);
 
   //Serial.println("Initializing IMU...");
@@ -186,10 +295,19 @@ void setup() {
   pinMode(INB_R, OUTPUT);
   pinMode(PWM_R, OUTPUT);
 
+  pinMode(ENCODER_A_L, INPUT);
+  pinMode(ENCODER_B_L, INPUT);
+  pinMode(ENCODER_A_R, INPUT);
+  pinMode(ENCODER_B_R, INPUT);
   attachInterrupt(digitalPinToInterrupt(ENCODER_A_L), encoderLeftInterruptA, CHANGE);
   attachInterrupt(digitalPinToInterrupt(ENCODER_B_L), encoderLeftInterruptB, CHANGE);
   attachInterrupt(digitalPinToInterrupt(ENCODER_A_R), encoderRightInterruptA, CHANGE);
   attachInterrupt(digitalPinToInterrupt(ENCODER_B_R), encoderRightInterruptB, CHANGE);
+
+  pinMode(RC_CHANNEL1_PIN, INPUT);
+  pinMode(RC_CHANNEL2_PIN, INPUT);
+  attachInterrupt(digitalPinToInterrupt(RC_CHANNEL1_PIN), rcChannel1Interrupt, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(RC_CHANNEL2_PIN), rcChannel2Interrupt, CHANGE);
 
   // Turbo = false
   pwm.setClockDivider(1, false);
@@ -209,6 +327,8 @@ void setup() {
 
   calibrateIMU();
 
+  speedPid.SetSampleTime(LOOP_MICROS/1000);
+  speedPid.SetOutputLimits(-15, 15);
   pitchPid.SetSampleTime(LOOP_MICROS/1000);
   pitchPid.SetOutputLimits(-1000, 1000);
   directionPid.SetSampleTime(LOOP_MICROS/1000);
@@ -225,10 +345,13 @@ void setup() {
   ---------*/
 
 void reset() {
+  speedSetPoint = PITCH_OFFSET;
   pitchReading = 0;
   pitchSetPoint = PITCH_OFFSET;
   pitchPidOutput = 0;
+  speedFilter.reset();
   started = false;
+  speedPid.SetMode(MANUAL);
   pitchPid.SetMode(MANUAL);
   directionPid.SetMode(MANUAL);
 }
@@ -244,15 +367,11 @@ void computePitch() {
 
   imuData.pitchAccelerometer = accelAngleX;
 
-  /*Serial1.print("ipa:");
-    Serial1.print(pitchAccelerometer);
-    Serial1.print(", ");*/
-
   // Read gyro values
   float gx, gy, gz;
   IMU.readGyroscope(gx, gy, gz);
 
-  // Apply calibration value
+  // Apply calibration value - not actually necessary it turns out
   //gx -= imuData.gyroXCalibration;
   //gy -= imuData.gyroYCalibration;
 
@@ -274,9 +393,6 @@ void loop() {
 
   if (IMU.accelerationAvailable() && IMU.gyroscopeAvailable()) {
     computePitch();
-    /*Serial1.print("p:");
-      Serial1.print(imuData.pitchReading);
-      Serial1.println();*/
   }
 
   // Start balancing when angle is close to zero
@@ -285,6 +401,7 @@ void loop() {
       && imuData.pitchAccelerometer < 1.0 + PITCH_OFFSET) {
     imuData.pitchReading = imuData.pitchAccelerometer;
     started = true;
+    speedPid.SetMode(AUTOMATIC);
     pitchPid.SetMode(AUTOMATIC);
     directionPid.SetMode(AUTOMATIC);
     encoderLeft.resetValue();
@@ -292,13 +409,35 @@ void loop() {
   }
 
   if (started) {
+    // Calculate speed from the encoder readings
+    long newEncoderLeftValue = encoderLeft.getValue();
+    long newEncoderRightValue = -encoderRight.getValue();
+    long speedLeft = newEncoderLeftValue - encoderLeftValue;
+    long speedRight = newEncoderRightValue - encoderRightValue;
+    double overallSpeed = (speedLeft + speedRight) / 2.0;
+    filteredSpeed = speedFilter.step(overallSpeed);
+    encoderLeftValue = newEncoderLeftValue;
+    encoderRightValue = newEncoderRightValue;
+
+    // Use RC controller to set speed
+    if (rcChannel1PulseDuration > 100 && rcChannel1PulseDuration < 1250) {
+      speedSetPoint = -2;
+    } else if (rcChannel1PulseDuration > 1750) {
+      speedSetPoint = 2;
+    } else {
+      speedSetPoint = 0;
+    }
+
+    //  Set the desired angle based on the error in the speed
+    speedPid.Compute();
+    pitchSetPoint = speedPidOutput + PITCH_OFFSET; // imperfect construction of robot
+
     pitchReading = imuData.pitchReading;
     pitchPid.Compute();
     double pwmLeft = pitchPidOutput;
     double pwmRight = pitchPidOutput;
 
-    long encoderLeftValue = encoderLeft.getValue();
-    long encoderRightValue = -encoderRight.getValue();
+    // Calculate direction from the encoder readings and apply direction control to keep the robot straight
     directionReading = encoderLeftValue - encoderRightValue;
     directionPid.Compute();
     pwmLeft += directionPidOutput;
@@ -317,19 +456,13 @@ void loop() {
     Serial1.print(pitchPidOutput);
     Serial1.print(", s:");
     Serial1.print(pwmLeft);*/
-    Serial1.print(", l:");
-    Serial1.print(encoderLeftValue);
-    Serial1.print(", r:");
-    Serial1.print(encoderRightValue);
+    /*Serial1.print(", d:");
+    Serial1.print(directionReading);*/
+    Serial1.print(", s:");
+    Serial1.print(overallSpeed);
+    Serial1.print(", fs:");
+    Serial1.print(filteredSpeed);
     Serial1.println();
-
-    // Automatic balance point correction
-    if (pitchPidOutput < -10) {
-      pitchSetPoint += 0.002;
-    }
-    if (pitchPidOutput > 10) {
-      pitchSetPoint -= 0.002;
-    }
 
     if (pitchReading > 45 || pitchReading < -45) {
       pwmLeft = 0;
