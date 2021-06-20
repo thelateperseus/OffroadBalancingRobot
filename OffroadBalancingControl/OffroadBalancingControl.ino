@@ -8,7 +8,7 @@
     Encoder Speed Filter
   ---------*/
 
-// Low pass butterworth filter order=2 alpha1=0.2
+// Low pass butterworth filter order=2 alpha1=0.016
 class  FilterBuLp2
 {
   public:
@@ -23,9 +23,9 @@ class  FilterBuLp2
     {
       v[0] = v[1];
       v[1] = v[2];
-      v[2] = (1.335920002785651040e-2 * x)
-         + (-0.70089678118840259557 * v[0])
-         + (1.64745998107697655399 * v[1]);
+      v[2] = (2.357208772852337209e-3 * x)
+             + (-0.86747213379166820957 * v[0])
+             + (1.85804329870025886073 * v[1]);
       return
         (v[0] + v[2])
         + 2 * v[1];
@@ -35,7 +35,7 @@ class  FilterBuLp2
     {
       v[0] = 0.0;
       v[1] = 0.0;
-      v[2] = 0.0;      
+      v[2] = 0.0;
     }
 };
 
@@ -86,7 +86,7 @@ long encoderLeftValue;
 long encoderRightValue;
 
 double kps = 0.2;
-double kis = 0.05;
+double kis = 0.1;
 double kds = 0;
 double speedSetPoint = 0;
 double filteredSpeed = 0;
@@ -117,9 +117,9 @@ FilterBuLp2 speedFilter;
 SerialCommand cmd;
 
 volatile unsigned long rcChannel1PulseStart = 0;
-volatile unsigned long rcChannel1PulseDuration = 0;
+volatile long rcChannel1PulseDuration = 0;
 volatile unsigned long rcChannel2PulseStart = 0;
-volatile unsigned long rcChannel2PulseDuration = 0;
+volatile long rcChannel2PulseDuration = 0;
 
 /*---------
     Setup
@@ -327,11 +327,11 @@ void setup() {
 
   calibrateIMU();
 
-  speedPid.SetSampleTime(LOOP_MICROS/1000);
+  speedPid.SetSampleTime(LOOP_MICROS / 1000);
   speedPid.SetOutputLimits(-15, 15);
-  pitchPid.SetSampleTime(LOOP_MICROS/1000);
+  pitchPid.SetSampleTime(LOOP_MICROS / 1000);
   pitchPid.SetOutputLimits(-1000, 1000);
-  directionPid.SetSampleTime(LOOP_MICROS/1000);
+  directionPid.SetSampleTime(LOOP_MICROS / 1000);
   directionPid.SetOutputLimits(-15, 15);
 
   reset();
@@ -410,6 +410,8 @@ void loop() {
     reset();
     imuData.pitchReading = imuData.pitchAccelerometer;
     started = true;
+    encoderLeftValue = 0;
+    encoderRightValue = 0;
     encoderLeft.resetValue();
     encoderRight.resetValue();
     speedPid.SetMode(AUTOMATIC);
@@ -450,18 +452,15 @@ void loop() {
     directionReading = encoderLeftValue - encoderRightValue;
 
     // Use RC controller to turn
-    if (rcChannel2PulseDuration > 100 && rcChannel2PulseDuration < 1250) {
+    if (rcChannel2PulseDuration > 100 &&
+        (rcChannel2PulseDuration < 1460 || rcChannel2PulseDuration > 1560)) {
       directionPid.SetMode(MANUAL);
       directionSetPoint = directionReading;
       directionPidOutput = 0;
-      pwmLeft += 35;
-      pwmRight -= 35;
-    } else if (rcChannel2PulseDuration > 1750) {
-      directionPid.SetMode(MANUAL);
-      directionSetPoint = directionReading;
-      directionPidOutput = 0;
-      pwmLeft -= 35;
-      pwmRight += 35;
+      long steering = (rcChannel2PulseDuration - 1510) / 10;
+      steering = constrain(steering, -50, 50);
+      pwmLeft -= steering;
+      pwmRight += steering;
     } else {
       directionPid.SetMode(AUTOMATIC);
       directionPid.Compute();
@@ -479,11 +478,11 @@ void loop() {
     Serial1.print(", pv:");
     Serial1.print(pitchReading);
     /*Serial1.print(", o:");
-    Serial1.print(pitchPidOutput);
-    Serial1.print(", s:");
-    Serial1.print(pwmLeft);*/
+      Serial1.print(pitchPidOutput);
+      Serial1.print(", s:");
+      Serial1.print(pwmLeft);*/
     /*Serial1.print(", d:");
-    Serial1.print(directionReading);*/
+      Serial1.print(directionReading);*/
     Serial1.print(", ssp:");
     Serial1.print(speedSetPoint);
     Serial1.print(", s:");

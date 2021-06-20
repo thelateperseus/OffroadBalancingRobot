@@ -2,9 +2,9 @@ const int CHANNEL1_PIN = 2;
 const int CHANNEL2_PIN = 3;
 
 volatile unsigned long channel1PulseStart = 0;
-volatile unsigned long channel1PulseDuration = 0;
+volatile long channel1PulseDuration = 0;
 volatile unsigned long channel2PulseStart = 0;
-volatile unsigned long channel2PulseDuration = 0;
+volatile long channel2PulseDuration = 0;
 
 void channel1Interrupt() {
   boolean channel1 = digitalRead(CHANNEL1_PIN);
@@ -40,5 +40,14 @@ void loop() {
   Serial.print("x:");
   Serial.print(channel1PulseDuration);
   Serial.print(", y:");
-  Serial.println(channel2PulseDuration);
+  Serial.print(channel2PulseDuration);
+  Serial.print(", t:");
+  Serial.print((channel1PulseDuration-1510)/10);
+
+  long steering = (channel2PulseDuration - 1510) / 10;
+  steering = constrain(steering, -50, 50);
+
+  Serial.print(", d:");
+  Serial.print(steering);
+  Serial.println();
 }
