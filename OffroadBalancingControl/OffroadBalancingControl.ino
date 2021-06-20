@@ -79,14 +79,14 @@ IMUData imuData;
 
 boolean started = false;
 
-const double PITCH_OFFSET = -0.2;
+const double PITCH_OFFSET = 0.4;
 double motorDeadBand = 56;
 
 long encoderLeftValue;
 long encoderRightValue;
 
-double kps = 0.08;
-double kis = 0.5;
+double kps = 0.2;
+double kis = 0.05;
 double kds = 0;
 double speedSetPoint = 0;
 double filteredSpeed = 0;
@@ -345,15 +345,23 @@ void setup() {
   ---------*/
 
 void reset() {
-  speedSetPoint = PITCH_OFFSET;
-  pitchReading = 0;
-  pitchSetPoint = PITCH_OFFSET;
-  pitchPidOutput = 0;
-  speedFilter.reset();
-  started = false;
   speedPid.SetMode(MANUAL);
+  speedSetPoint = 0;
+  filteredSpeed = 0;
+  speedPidOutput = 0;
+  speedFilter.reset();
+
   pitchPid.SetMode(MANUAL);
+  pitchSetPoint = PITCH_OFFSET;
+  pitchReading = 0;
+  pitchPidOutput = 0;
+
   directionPid.SetMode(MANUAL);
+  directionSetPoint = 0;
+  directionReading = 0;
+  directionPidOutput = 0;
+
+  started = false;
 }
 
 void computePitch() {
@@ -399,13 +407,14 @@ void loop() {
   if (!started
       && imuData.pitchAccelerometer > -1.0 + PITCH_OFFSET
       && imuData.pitchAccelerometer < 1.0 + PITCH_OFFSET) {
+    reset();
     imuData.pitchReading = imuData.pitchAccelerometer;
     started = true;
+    encoderLeft.resetValue();
+    encoderRight.resetValue();
     speedPid.SetMode(AUTOMATIC);
     pitchPid.SetMode(AUTOMATIC);
     directionPid.SetMode(AUTOMATIC);
-    encoderLeft.resetValue();
-    encoderRight.resetValue();
   }
 
   if (started) {
@@ -421,9 +430,9 @@ void loop() {
 
     // Use RC controller to set speed
     if (rcChannel1PulseDuration > 100 && rcChannel1PulseDuration < 1250) {
-      speedSetPoint = -2;
+      speedSetPoint = -3;
     } else if (rcChannel1PulseDuration > 1750) {
-      speedSetPoint = 2;
+      speedSetPoint = 3;
     } else {
       speedSetPoint = 0;
     }
@@ -439,9 +448,26 @@ void loop() {
 
     // Calculate direction from the encoder readings and apply direction control to keep the robot straight
     directionReading = encoderLeftValue - encoderRightValue;
-    directionPid.Compute();
-    pwmLeft += directionPidOutput;
-    pwmRight -= directionPidOutput;
+
+    // Use RC controller to turn
+    if (rcChannel2PulseDuration > 100 && rcChannel2PulseDuration < 1250) {
+      directionPid.SetMode(MANUAL);
+      directionSetPoint = directionReading;
+      directionPidOutput = 0;
+      pwmLeft += 35;
+      pwmRight -= 35;
+    } else if (rcChannel2PulseDuration > 1750) {
+      directionPid.SetMode(MANUAL);
+      directionSetPoint = directionReading;
+      directionPidOutput = 0;
+      pwmLeft -= 35;
+      pwmRight += 35;
+    } else {
+      directionPid.SetMode(AUTOMATIC);
+      directionPid.Compute();
+      pwmLeft += directionPidOutput;
+      pwmRight -= directionPidOutput;
+    }
 
     boolean directionLeft = pwmLeft > 0;
     boolean directionRight = pwmRight > 0;
@@ -458,6 +484,8 @@ void loop() {
     Serial1.print(pwmLeft);*/
     /*Serial1.print(", d:");
     Serial1.print(directionReading);*/
+    Serial1.print(", ssp:");
+    Serial1.print(speedSetPoint);
     Serial1.print(", s:");
     Serial1.print(overallSpeed);
     Serial1.print(", fs:");
