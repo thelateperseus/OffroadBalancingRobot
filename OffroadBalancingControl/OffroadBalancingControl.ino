@@ -85,8 +85,8 @@ double motorDeadBand = 56;
 long encoderLeftValue;
 long encoderRightValue;
 
-double kps = 0.2;
-double kis = 0.1;
+double kps = 0.3;
+double kis = 0.7;
 double kds = 0;
 double speedSetPoint = 0;
 double filteredSpeed = 0;
