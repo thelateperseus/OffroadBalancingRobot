@@ -85,8 +85,8 @@ double motorDeadBand = 56;
 long encoderLeftValue;
 long encoderRightValue;
 
-double kps = 0.3;
-double kis = 0.7;
+double kps = 0.2; // 0.3
+double kis = 0.4; // 0.7
 double kds = 0;
 double speedSetPoint = 0;
 double filteredSpeed = 0;
@@ -431,10 +431,10 @@ void loop() {
     encoderRightValue = newEncoderRightValue;
 
     // Use RC controller to set speed
-    if (rcChannel1PulseDuration > 100 && rcChannel1PulseDuration < 1250) {
-      speedSetPoint = -3;
-    } else if (rcChannel1PulseDuration > 1750) {
-      speedSetPoint = 3;
+    if (rcChannel1PulseDuration > 100 && 
+        (rcChannel1PulseDuration < 1460 || rcChannel1PulseDuration > 1560)) {
+      long rcSpeed = (rcChannel1PulseDuration - 1510) / 80;
+      speedSetPoint = constrain(rcSpeed, -6, 6);
     } else {
       speedSetPoint = 0;
     }
@@ -457,8 +457,8 @@ void loop() {
       directionPid.SetMode(MANUAL);
       directionSetPoint = directionReading;
       directionPidOutput = 0;
-      long steering = (rcChannel2PulseDuration - 1510) / 10;
-      steering = constrain(steering, -50, 50);
+      long steering = (rcChannel2PulseDuration - 1510) / 7;
+      steering = constrain(steering, -70, 70);
       pwmLeft -= steering;
       pwmRight += steering;
     } else {
