@@ -85,16 +85,16 @@ double motorDeadBand = 56;
 long encoderLeftValue;
 long encoderRightValue;
 
-double kps = 0.2; // 0.3
-double kis = 0.4; // 0.7
+double kps = 0.3; // 0.3
+double kis = 0.15; // 0.7
 double kds = 0;
 double speedSetPoint = 0;
 double filteredSpeed = 0;
 double speedPidOutput = 0;
 PID speedPid(&filteredSpeed, &speedPidOutput, &speedSetPoint, kps, kis, kds, DIRECT);
 
-double kpp = 30; // 50
-double kip = 120; // 150
+double kpp = 40; // 30
+double kip = 90; // 120
 double kdp = 0.5;
 double pitchSetPoint = PITCH_OFFSET;
 double pitchReading = 0;
