@@ -95,13 +95,13 @@ PID speedPid(&filteredSpeed, &speedPidOutput, &speedSetPoint, kps, kis, kds, DIR
 
 double kpp = 40; // 30
 double kip = 90; // 120
-double kdp = 0.5;
+double kdp = 2;
 double pitchSetPoint = PITCH_OFFSET;
 double pitchReading = 0;
 double pitchPidOutput = 0;
 PID pitchPid(&pitchReading, &pitchPidOutput, &pitchSetPoint, kpp, kip, kdp, REVERSE);
 
-double kpd = 0.1;
+double kpd = 0.2;
 double kid = 0;
 double kdd = 0;
 double directionSetPoint = 0;
@@ -332,7 +332,7 @@ void setup() {
   pitchPid.SetSampleTime(LOOP_MICROS / 1000);
   pitchPid.SetOutputLimits(-1000, 1000);
   directionPid.SetSampleTime(LOOP_MICROS / 1000);
-  directionPid.SetOutputLimits(-15, 15);
+  directionPid.SetOutputLimits(-30, 30);
 
   reset();
 
