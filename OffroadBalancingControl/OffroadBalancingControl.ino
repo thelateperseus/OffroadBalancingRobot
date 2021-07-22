@@ -1,43 +1,9 @@
 #include "Encoder.h"
-#include "LSM6DS3.h"
+#include "IMUFilter.h"
 #include "PID_v1.h"
 #include <SAMD21turboPWM.h>
 #include "SerialCommand.h"
-
-/*---------
-    Encoder Speed Filter
-  ---------*/
-
-// Low pass butterworth filter order=2 alpha1=0.016
-class  FilterBuLp2
-{
-  public:
-    FilterBuLp2()
-    {
-      this -> reset();
-    }
-  private:
-    double v[3];
-  public:
-    double step(double x) //class II
-    {
-      v[0] = v[1];
-      v[1] = v[2];
-      v[2] = (2.357208772852337209e-3 * x)
-             + (-0.86747213379166820957 * v[0])
-             + (1.85804329870025886073 * v[1]);
-      return
-        (v[0] + v[2])
-        + 2 * v[1];
-    }
-
-    void reset()
-    {
-      v[0] = 0.0;
-      v[1] = 0.0;
-      v[2] = 0.0;
-    }
-};
+#include "SpeedFilter.h"
 
 /*---------
     More constants than physics
@@ -45,9 +11,6 @@ class  FilterBuLp2
 
 const int LOOP_MICROS = 4000;
 long loopEndTime = 0;
-long lastImuMesaurementMicros = 0;
-
-const float RADIANS_TO_DEGREES = 57.296;
 
 const int ENCODER_A_L = 9;
 const int ENCODER_B_L = 10;
@@ -64,39 +27,25 @@ const int PWM_R = 6;
 const int RC_CHANNEL1_PIN = 2;
 const int RC_CHANNEL2_PIN = 3;
 
-struct IMUData {
-  float gyroXCalibration = 0;
-  float gyroYCalibration = 0;
-  float gyroZCalibration = 0;
-  float accelerometerXCalibration = 0;
-  float accelerometerYCalibration = 0;
-  float accelerometerZCalibration = 0;
-  float pitchAccelerometer = 0;
-  float pitchReading = 0;
-};
-
-IMUData imuData;
-
 boolean started = false;
 
-const double PITCH_OFFSET = 0.4;
 double motorDeadBand = 56;
 
 long encoderLeftValue;
 long encoderRightValue;
 
-double kps = 0.3; // 0.3
-double kis = 0.15; // 0.7
+double kps = 0.3; // TODO 0.25
+double kis = 0.15; // TODO 0.18
 double kds = 0;
 double speedSetPoint = 0;
 double filteredSpeed = 0;
 double speedPidOutput = 0;
 PID speedPid(&filteredSpeed, &speedPidOutput, &speedSetPoint, kps, kis, kds, DIRECT);
 
-double kpp = 40; // 30
-double kip = 90; // 120
-double kdp = 2;
-double pitchSetPoint = PITCH_OFFSET;
+double kpp = 40;
+double kip = 90;
+double kdp = 2; // TODO 3
+double pitchSetPoint = 0;
 double pitchReading = 0;
 double pitchPidOutput = 0;
 PID pitchPid(&pitchReading, &pitchPidOutput, &pitchSetPoint, kpp, kip, kdp, REVERSE);
@@ -112,9 +61,12 @@ PID directionPid(&directionReading, &directionPidOutput, &directionSetPoint, kpd
 TurboPWM pwm;
 Encoder encoderLeft(ENCODER_A_L, ENCODER_B_L);
 Encoder encoderRight(ENCODER_A_R, ENCODER_B_R);
-FilterBuLp2 speedFilter;
+SpeedFilter speedFilter;
 
 SerialCommand cmd;
+
+IMUData imuData;
+IMUFilter imuFilter;
 
 volatile unsigned long rcChannel1PulseStart = 0;
 volatile long rcChannel1PulseDuration = 0;
@@ -124,60 +76,6 @@ volatile long rcChannel2PulseDuration = 0;
 /*---------
     Setup
   ---------*/
-
-void calibrateIMU() {
-  //Serial.println("Measuring internal IMU calibration values...");
-  float gxSum = 0;
-  float gySum = 0;
-  float gzSum = 0;
-  float axSum = 0;
-  float aySum = 0;
-  float azSum = 0;
-  for (int i = 0; i < 500; i++) {
-    if (i % 15 == 0) {
-      digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));        //Change the state of the LED every 15 loops to make the LED blink fast
-    }
-
-    float gx, gy, gz;
-    IMU.readGyroscope(gx, gy, gz);
-    gxSum += gx;
-    gySum += gy;
-    gzSum += gz;
-
-    float ax, ay, az;
-    IMU.readAcceleration(ax, ay, az);
-    axSum += ax;
-    aySum += ay;
-    azSum += az;
-
-    while (!IMU.accelerationAvailable() && !IMU.gyroscopeAvailable());
-  }
-  lastImuMesaurementMicros = micros();
-  // Get the average from the 500 readings
-  imuData.gyroXCalibration = gxSum / 500;
-  imuData.gyroYCalibration = gySum / 500;
-  imuData.gyroZCalibration = gzSum / 500;
-  imuData.accelerometerXCalibration = axSum / 500;
-  imuData.accelerometerYCalibration = aySum / 500;
-  imuData.accelerometerZCalibration = azSum / 500;
-
-  // Gyro calibration complete, gy: 275, ax: -138, ay: -286, az: 18227
-  /*Serial.print("Internal IMU calibration complete, gx: ");
-    Serial.print(imuData.gyroXCalibration);
-    Serial.print(", gy: ");
-    Serial.print(imuData.gyroYCalibration);
-    Serial.print(", gz: ");
-    Serial.print(imuData.gyroZCalibration);
-    Serial.print(", ax: ");
-    Serial.print(imuData.accelerometerXCalibration);
-    Serial.print(", ay: ");
-    Serial.print(imuData.accelerometerYCalibration);
-    Serial.print(", az: ");
-    Serial.print(imuData.accelerometerZCalibration);
-    Serial.println();*/
-
-  // 12:39:01.706 -> Internal IMU calibration complete, gx: 0.91, gy: -3.77, gz: -4.53, ax: 0.03, ay: 0.01, az: 0.99
-}
 
 void setKpp() {
   char* arg = cmd.next();
@@ -284,6 +182,7 @@ void setup() {
   cmd.addCommand("db", setDeadband);
 
   //Serial.println("Initializing IMU...");
+  imuFilter.initialise();
 
   // initialize digital pin LED_BUILTIN as an output.
   pinMode(LED_BUILTIN, OUTPUT);
@@ -317,16 +216,6 @@ void setup() {
   pwm.analogWrite(PWM_L, 0);
   pwm.analogWrite(PWM_R, 0);
 
-  if (!IMU.begin()) {
-    //Serial.println("Failed to initialize internal IMU!");
-    while (1) {
-      digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
-      delay(500);
-    }
-  }
-
-  calibrateIMU();
-
   speedPid.SetSampleTime(LOOP_MICROS / 1000);
   speedPid.SetOutputLimits(-15, 15);
   pitchPid.SetSampleTime(LOOP_MICROS / 1000);
@@ -352,7 +241,7 @@ void reset() {
   speedFilter.reset();
 
   pitchPid.SetMode(MANUAL);
-  pitchSetPoint = PITCH_OFFSET;
+  pitchSetPoint = 0;
   pitchReading = 0;
   pitchPidOutput = 0;
 
@@ -364,51 +253,15 @@ void reset() {
   started = false;
 }
 
-void computePitch() {
-  // Read x, y, z accelerometer values
-  float ax, ay, az;
-  IMU.readAcceleration(ax, ay, az);
-
-  // Calculate the current pitch angle in degrees according to the accelerometer
-  float accelAngleX = atan(ay / sqrt(pow(ax, 2) + pow(az, 2))) * RADIANS_TO_DEGREES;
-  //float accelAngleY = atan(-1 * ax / sqrt(pow(ay, 2) + pow(az, 2))) * RADIANS_TO_DEGREES;
-
-  imuData.pitchAccelerometer = accelAngleX;
-
-  // Read gyro values
-  float gx, gy, gz;
-  IMU.readGyroscope(gx, gy, gz);
-
-  // Apply calibration value - not actually necessary it turns out
-  //gx -= imuData.gyroXCalibration;
-  //gy -= imuData.gyroYCalibration;
-
-  long currentMicros = micros();
-  float dt = (currentMicros - lastImuMesaurementMicros) / 1000000.0;
-  lastImuMesaurementMicros = currentMicros;
-
-  // Calculate the angle in degrees traveled during this loop angle
-  // (Gyroscope Angle) = (Last Measured Filtered Angle) + ω×Δt
-  float pitchGyro = imuData.pitchReading + gx * dt;
-
-  // Complementary filter to combine the gyro and accelerometer angle
-  // Filtered Angle = α × (Gyroscope Angle) + (1 − α) × (Accelerometer Angle)
-  imuData.pitchReading = 0.996 * pitchGyro + 0.004 * imuData.pitchAccelerometer;
-}
-
 void loop() {
   cmd.readSerial(&Serial1);
 
-  if (IMU.accelerationAvailable() && IMU.gyroscopeAvailable()) {
-    computePitch();
-  }
+  imuFilter.getPitchAngle(imuData);
 
   // Start balancing when angle is close to zero
-  if (!started
-      && imuData.pitchAccelerometer > -1.0 + PITCH_OFFSET
-      && imuData.pitchAccelerometer < 1.0 + PITCH_OFFSET) {
+  if (!started && abs(imuData.pitchReading) < 1.0) {
     reset();
-    imuData.pitchReading = imuData.pitchAccelerometer;
+    //imuData.pitchReading = imuData.pitchAccelerometer;
     started = true;
     encoderLeftValue = 0;
     encoderRightValue = 0;
@@ -441,7 +294,7 @@ void loop() {
 
     //  Set the desired angle based on the error in the speed
     speedPid.Compute();
-    pitchSetPoint = speedPidOutput + PITCH_OFFSET; // imperfect construction of robot
+    pitchSetPoint = speedPidOutput;
 
     pitchReading = imuData.pitchReading;
     pitchPid.Compute();
@@ -457,8 +310,8 @@ void loop() {
       directionPid.SetMode(MANUAL);
       directionSetPoint = directionReading;
       directionPidOutput = 0;
-      long steering = (rcChannel2PulseDuration - 1510) / 7;
-      steering = constrain(steering, -70, 70);
+      long steering = (rcChannel2PulseDuration - 1510) / 5;
+      steering = constrain(steering, -100, 100);
       pwmLeft -= steering;
       pwmRight += steering;
     } else {

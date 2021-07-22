@@ -66,15 +66,22 @@ int LSM6DS3Class::begin()
   //set the gyroscope control register to work at 208 Hz, 2000 dps and in bypass mode
   writeRegister(LSM6DS3_CTRL2_G, 0x5C);
 
-  // Set the Accelerometer control register to work at 208 Hz, 4G,and in bypass mode and enable ODR/4
-  // low pass filter(check figure9 of LSM6DS3's datasheet)
+  // Set the Accelerometer control register to work at 208 Hz (ODR_XL), with range +-4g, and anti-aliasing filter 100 Hz
   writeRegister(LSM6DS3_CTRL1_XL, 0x5A);
 
   // set gyroscope power mode to high performance and bandwidth to 16 MHz
   writeRegister(LSM6DS3_CTRL7_G, 0x00);
 
-  // Set the ODR config register to ODR/4
-  writeRegister(LSM6DS3_CTRL8_XL, 0x09);
+  // Set the accelerometer low pass filter to ODR_XL/50, i.e. 208/50 = 4.16Hz
+  // LPF2_XL_EN | HPCF_XL1 | HPCF_XL0 | 0 | HP_SLOPE_XL_EN | 0 | LOW_PASS_ON_6D
+  //
+  // HPCF_XL[1:0]   LPF2 digital filter cutoff frequency [Hz]
+  // --------------------------------------------------------
+  // *   00         ODR_XL/50
+  //     01         ODR_XL/100
+  //     10         ODR_XL/9
+  //     11         ODR_XL/400
+  //writeRegister(LSM6DS3_CTRL8_XL, 0x80);
 
   return 1;
 }
@@ -84,6 +91,11 @@ void LSM6DS3Class::end()
   writeRegister(LSM6DS3_CTRL2_G, 0x00);
   writeRegister(LSM6DS3_CTRL1_XL, 0x00);
   _wire->end();
+}
+
+boolean LSM6DS3Class::dataAvailable() {
+  int statusRegister = readRegister(LSM6DS3_STATUS_REG);
+  return (statusRegister & 0x01) && (statusRegister & 0x02);
 }
 
 int LSM6DS3Class::readAcceleration(float& x, float& y, float& z)
@@ -105,22 +117,7 @@ int LSM6DS3Class::readAcceleration(float& x, float& y, float& z)
   return 1;
 }
 
-int LSM6DS3Class::accelerationAvailable()
-{
-  if (readRegister(LSM6DS3_STATUS_REG) & 0x01) {
-    return 1;
-  }
-
-  return 0;
-}
-
-float LSM6DS3Class::accelerationSampleRate()
-{
-  return 104.0F;
-}
-
-int LSM6DS3Class::readGyroscope(float& x, float& y, float& z)
-{
+int LSM6DS3Class::readGyroscope(float& x, float& y, float& z) {
   int16_t data[3];
 
   if (!readRegisters(LSM6DS3_OUTX_L_G, (uint8_t*)data, sizeof(data))) {
@@ -136,20 +133,6 @@ int LSM6DS3Class::readGyroscope(float& x, float& y, float& z)
   z = data[2] * 2000.0 / 32768.0;
 
   return 1;
-}
-
-int LSM6DS3Class::gyroscopeAvailable()
-{
-  if (readRegister(LSM6DS3_STATUS_REG) & 0x02) {
-    return 1;
-  }
-
-  return 0;
-}
-
-float LSM6DS3Class::gyroscopeSampleRate()
-{
-  return 104.0F;
 }
 
 int LSM6DS3Class::readRegister(uint8_t address)
