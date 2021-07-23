@@ -36,7 +36,8 @@ class IMUFilter {
   public:
     IMUFilter();
     void initialise();
-    void getPitchAngle(IMUData& imuData);
+    void getFilteredAngle(IMUData& imuData);
+    void resetToAccelerometerAngle();
 
   private:
     float computeAccelerometerPitch(float ax, float ay, float az);
@@ -47,7 +48,8 @@ class IMUFilter {
     float accelerometerXCalibration = 0;
     float accelerometerYCalibration = 0;
     float accelerometerZCalibration = 0;
-    float lastPitchValue = 0;
+    float lastFilteredAngle = 0;
+    float lastAccelerometerAngle = 0;
     long lastImuMesaurementMicros = 0;
     AccelerometerFilter accelerometerFilterX;
     AccelerometerFilter accelerometerFilterY;

@@ -34,8 +34,8 @@ double motorDeadBand = 56;
 long encoderLeftValue;
 long encoderRightValue;
 
-double kps = 0.3; // TODO 0.25
-double kis = 0.15; // TODO 0.18
+double kps = 0.25; // 0.3
+double kis = 0.18; // 0.15
 double kds = 0;
 double speedSetPoint = 0;
 double filteredSpeed = 0;
@@ -256,12 +256,12 @@ void reset() {
 void loop() {
   cmd.readSerial(&Serial1);
 
-  imuFilter.getPitchAngle(imuData);
+  imuFilter.getFilteredAngle(imuData);
 
   // Start balancing when angle is close to zero
-  if (!started && abs(imuData.pitchReading) < 1.0) {
+  if (!started && abs(imuData.pitchAccelerometer) < 1.0) {
     reset();
-    //imuData.pitchReading = imuData.pitchAccelerometer;
+    imuFilter.resetToAccelerometerAngle();
     started = true;
     encoderLeftValue = 0;
     encoderRightValue = 0;

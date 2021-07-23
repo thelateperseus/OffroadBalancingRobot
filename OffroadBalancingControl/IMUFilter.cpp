@@ -5,7 +5,7 @@ IMUFilter::IMUFilter() {
 }
 
 // Offset value to compensate for robot centre of mass
-const double PITCH_OFFSET = -4.5;
+const double PITCH_OFFSET = -0.8;
 
 const float RADIANS_TO_DEGREES = 57.296;
 
@@ -69,8 +69,8 @@ void IMUFilter::initialise() {
     Serial.println();*/
 
   // 12:39:01.706 -> Internal IMU calibration complete, gx: 0.91, gy: -3.77, gz: -4.53, ax: 0.03, ay: 0.01, az: 0.99
-
-  lastPitchValue = computeAccelerometerPitch(accelerometerXCalibration, accelerometerYCalibration, accelerometerZCalibration);
+  lastAccelerometerAngle = computeAccelerometerPitch(accelerometerXCalibration, accelerometerYCalibration, accelerometerZCalibration);
+  resetToAccelerometerAngle();
 }
 
 // Calculate the current pitch angle in degrees according to the accelerometer
@@ -79,7 +79,7 @@ float IMUFilter::computeAccelerometerPitch(float ax, float ay, float az) {
   return atan(ay / sqrt(pow(ax, 2) + pow(az, 2))) * RADIANS_TO_DEGREES;
 }
 
-void IMUFilter::getPitchAngle(IMUData& imuData) {
+void IMUFilter::getFilteredAngle(IMUData& imuData) {
   if (!IMU.dataAvailable()) {
     return;
   }
@@ -92,7 +92,7 @@ void IMUFilter::getPitchAngle(IMUData& imuData) {
   ay = accelerometerFilterY.step(ay);
   az = accelerometerFilterZ.step(az);
 
-  float pitchAccelerometer = computeAccelerometerPitch(ax, ay, az);
+  lastAccelerometerAngle = computeAccelerometerPitch(ax, ay, az);
 
   // Read gyro values
   float gx, gy, gz;
@@ -108,12 +108,16 @@ void IMUFilter::getPitchAngle(IMUData& imuData) {
 
   // Calculate the angle in degrees traveled during this loop angle
   // (Gyroscope Angle) = (Last Measured Filtered Angle) + ω×Δt
-  float pitchGyro = lastPitchValue + gx * dt;
+  float pitchGyro = lastFilteredAngle + gx * dt;
 
   // Complementary filter to combine the gyro and accelerometer angle
   // Filtered Angle = α × (Gyroscope Angle) + (1 − α) × (Accelerometer Angle)
-  lastPitchValue = 0.996 * pitchGyro + 0.004 * pitchAccelerometer;
+  lastFilteredAngle = 0.996 * pitchGyro + 0.004 * lastAccelerometerAngle;
 
-  imuData.pitchAccelerometer = pitchAccelerometer - PITCH_OFFSET;
-  imuData.pitchReading = lastPitchValue - PITCH_OFFSET;
+  imuData.pitchAccelerometer = lastAccelerometerAngle - PITCH_OFFSET;
+  imuData.pitchReading = lastFilteredAngle - PITCH_OFFSET;
+}
+
+void IMUFilter::resetToAccelerometerAngle() {
+  lastFilteredAngle = lastAccelerometerAngle;
 }
