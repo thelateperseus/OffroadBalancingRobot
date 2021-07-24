@@ -34,8 +34,8 @@ double motorDeadBand = 56;
 long encoderLeftValue;
 long encoderRightValue;
 
-double kps = 0.25; // 0.3
-double kis = 0.18; // 0.15
+double kps = 0.3; // 0.3
+double kis = 0.15; // 0.15
 double kds = 0;
 double speedSetPoint = 0;
 double filteredSpeed = 0;
@@ -44,13 +44,13 @@ PID speedPid(&filteredSpeed, &speedPidOutput, &speedSetPoint, kps, kis, kds, DIR
 
 double kpp = 40;
 double kip = 90;
-double kdp = 2; // TODO 3
+double kdp = 2;
 double pitchSetPoint = 0;
 double pitchReading = 0;
 double pitchPidOutput = 0;
 PID pitchPid(&pitchReading, &pitchPidOutput, &pitchSetPoint, kpp, kip, kdp, REVERSE);
 
-double kpd = 0.2;
+double kpd = 0.4;
 double kid = 0;
 double kdd = 0;
 double directionSetPoint = 0;
@@ -286,8 +286,8 @@ void loop() {
     // Use RC controller to set speed
     if (rcChannel1PulseDuration > 100 && 
         (rcChannel1PulseDuration < 1460 || rcChannel1PulseDuration > 1560)) {
-      long rcSpeed = (rcChannel1PulseDuration - 1510) / 80;
-      speedSetPoint = constrain(rcSpeed, -6, 6);
+      long rcSpeed = (rcChannel1PulseDuration - 1510) / 32;
+      speedSetPoint = constrain(rcSpeed, -15, 15);
     } else {
       speedSetPoint = 0;
     }
