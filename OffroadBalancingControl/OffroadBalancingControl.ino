@@ -69,9 +69,11 @@ IMUData imuData;
 IMUFilter imuFilter;
 
 volatile unsigned long rcChannel1PulseStart = 0;
-volatile long rcChannel1PulseDuration = 0;
+volatile long rcChannel1PulseDuration = 1500;
+volatile int rcChannel1SkipCount = 0;
 volatile unsigned long rcChannel2PulseStart = 0;
-volatile long rcChannel2PulseDuration = 0;
+volatile long rcChannel2PulseDuration = 1500;
+volatile int rcChannel2SkipCount = 0;
 
 /*---------
     Setup
@@ -154,7 +156,14 @@ void rcChannel1Interrupt() {
   if (rcChannel1) {
     rcChannel1PulseStart = now;
   } else {
-    rcChannel1PulseDuration = now - rcChannel1PulseStart;
+    long duration = now - rcChannel1PulseStart;
+    // Ignore up to 2 consecutive spikes
+    if (abs(duration - rcChannel1PulseDuration) < 400 || rcChannel1SkipCount >= 2) {
+      rcChannel1PulseDuration = duration;
+      rcChannel1SkipCount = 0;
+    } else {
+      rcChannel1SkipCount += 1;
+    }
   }
 }
 
@@ -164,7 +173,14 @@ void rcChannel2Interrupt() {
   if (rcChannel2) {
     rcChannel2PulseStart = now;
   } else {
-    rcChannel2PulseDuration = now - rcChannel2PulseStart;
+    long duration = now - rcChannel2PulseStart;
+    // Ignore up to 2 consecutive spikes
+    if (abs(duration - rcChannel2PulseDuration) < 400 || rcChannel2SkipCount >= 2) {
+      rcChannel2PulseDuration = duration;
+      rcChannel2SkipCount = 0;
+    } else {
+      rcChannel2SkipCount += 1;
+    }
   }
 }
 
@@ -284,9 +300,9 @@ void loop() {
     encoderRightValue = newEncoderRightValue;
 
     // Use RC controller to set speed
-    if (rcChannel1PulseDuration > 100 && 
-        (rcChannel1PulseDuration < 1460 || rcChannel1PulseDuration > 1560)) {
-      long rcSpeed = (rcChannel1PulseDuration - 1510) / 32;
+    if (rcChannel1PulseDuration > 100 &&
+        (rcChannel1PulseDuration < 1450 || rcChannel1PulseDuration > 1550)) {
+      long rcSpeed = (rcChannel1PulseDuration - 1500) / 32;
       speedSetPoint = constrain(rcSpeed, -15, 15);
     } else {
       speedSetPoint = 0;
@@ -303,22 +319,37 @@ void loop() {
 
     // Calculate direction from the encoder readings and apply direction control to keep the robot straight
     directionReading = encoderLeftValue - encoderRightValue;
+    /*Serial1.print("rc1:");
+      Serial1.print(rcChannel1PulseDuration);
+      Serial1.print(", rc2:");
+      Serial1.print(rcChannel2PulseDuration);
+      Serial1.print(", sp:");
+      Serial1.print(directionSetPoint);
+      Serial1.print(", d:");
+      Serial1.print(directionReading);
+      Serial1.print(", ");*/
 
     // Use RC controller to turn
     if (rcChannel2PulseDuration > 100 &&
-        (rcChannel2PulseDuration < 1460 || rcChannel2PulseDuration > 1560)) {
+        (rcChannel2PulseDuration < 1450 || rcChannel2PulseDuration > 1550)) {
       directionPid.SetMode(MANUAL);
       directionSetPoint = directionReading;
       directionPidOutput = 0;
-      long steering = (rcChannel2PulseDuration - 1510) / 5;
-      steering = constrain(steering, -100, 100);
+      long steering = (rcChannel2PulseDuration - 1500) / 4;
+      steering = constrain(steering, -120, 120);
       pwmLeft -= steering;
       pwmRight += steering;
+      /*Serial1.print("st:");
+        Serial1.print(steering);
+        Serial1.print(", ");*/
     } else {
       directionPid.SetMode(AUTOMATIC);
       directionPid.Compute();
       pwmLeft += directionPidOutput;
       pwmRight -= directionPidOutput;
+      /*Serial1.print("st:");
+        Serial1.print(directionPidOutput);
+        Serial1.print(", ");*/
     }
 
     boolean directionLeft = pwmLeft > 0;
@@ -330,12 +361,6 @@ void loop() {
     Serial1.print(pitchSetPoint);
     Serial1.print(", pv:");
     Serial1.print(pitchReading);
-    /*Serial1.print(", o:");
-      Serial1.print(pitchPidOutput);
-      Serial1.print(", s:");
-      Serial1.print(pwmLeft);*/
-    /*Serial1.print(", d:");
-      Serial1.print(directionReading);*/
     Serial1.print(", ssp:");
     Serial1.print(speedSetPoint);
     Serial1.print(", s:");

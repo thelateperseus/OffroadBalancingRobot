@@ -42,9 +42,9 @@ void loop() {
   Serial.print(", y:");
   Serial.print(channel2PulseDuration);
   Serial.print(", t:");
-  Serial.print((channel1PulseDuration-1510)/10);
+  Serial.print((channel1PulseDuration-1500)/10);
 
-  long steering = (channel2PulseDuration - 1510) / 10;
+  long steering = (channel2PulseDuration - 1500) / 10;
   steering = constrain(steering, -50, 50);
 
   Serial.print(", d:");
