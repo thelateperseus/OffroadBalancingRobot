@@ -24,8 +24,8 @@ const int INA_R = A2;
 const int INB_R = A3;
 const int PWM_R = 6;
 
-const int RC_CHANNEL1_PIN = 2;
-const int RC_CHANNEL2_PIN = 3;
+const int RC_CHANNEL1_PIN = 3;
+const int RC_CHANNEL2_PIN = 2;
 
 boolean started = false;
 
