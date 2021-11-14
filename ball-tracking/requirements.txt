@@ -1,0 +1,6 @@
+imutils==0.5.4
+matplotlib==1.21.4
+numpy==1.21.4
+opencv-contrib-python==4.5.4.58
+simple-pid==1.0.1
+tensorflow==2.7.0

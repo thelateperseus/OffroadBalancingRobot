@@ -1,20 +1,10 @@
 # import the necessary packages
-from collections import deque
 from imutils.video import VideoStream
-from pantilthat import PanTiltHat
-from simple_pid import PID
 import numpy as np
 import argparse
 import cv2
 import imutils
 import time
-
-pth = PanTiltHat()
-pth.pan(0)
-pth.tilt(20)
-
-pidPan = PID(0.1, 0.5, 0.0, setpoint=160, sample_time=None, output_limits=(-75, 75), auto_mode=False)
-pidTilt = PID(0.075, 0.375, 0.0, setpoint=120, sample_time=None, output_limits=(-75, 30), auto_mode=False)
 
 # construct the argument parse and parse the arguments
 ap = argparse.ArgumentParser()
@@ -31,7 +21,6 @@ args = vars(ap.parse_args())
 #pinkUpper = (196,209,134)
 pinkLower = (117,85,0)
 pinkUpper = (175,209,255)
-pts = deque(maxlen=args["buffer"])
 
 # if a video path was not supplied, grab the reference
 # to the webcam
@@ -104,21 +93,6 @@ while True:
         else:
             radius = None
 
-    if radius == None:
-        # Reset PID controllers if ball not found
-        pidPan.set_auto_mode(False)
-        pidTilt.set_auto_mode(False)
-
-    else:
-        pidPan.set_auto_mode(True, last_output=0)
-        pidTilt.set_auto_mode(True, last_output=20)
-        panAngle = pidPan(centre[0])
-        tiltAngle = pidTilt(240 - centre[1])
-        #print(f'panAngle: {panAngle}, tiltAngle: {tiltAngle}')
-        pth.pan(panAngle)
-        pth.tilt(tiltAngle)
-
-    # TODO stream to Flask server
     # show the frame to our screen
     cv2.imshow("Frame", frame)
     key = cv2.waitKey(1) & 0xFF
@@ -138,5 +112,3 @@ else:
 # close all windows
 cv2.destroyAllWindows()
 
-# disable the servos
-pth.shutdown()
