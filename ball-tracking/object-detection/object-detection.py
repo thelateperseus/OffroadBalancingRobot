@@ -62,7 +62,7 @@ def apply_non_max_suppression(detections, iou_thresh=0.5, score_thresh=0.6):
     }
 
 
-PATH_TO_LABELS = './model/mscoco_label_map.pbtxt'
+PATH_TO_LABELS = './exported-models/ssd_mobilenet_v2_320x320_ball/ball_label_map.pbtxt'
 category_index = label_map_util.create_category_index_from_labelmap(PATH_TO_LABELS, use_display_name=True)
 
 print('Loading model...', end='')
@@ -70,7 +70,7 @@ start_time = time.time()
 
 # Load saved model and build the detection function
 #PATH_TO_SAVED_MODEL = './model/ssd_resnet50_v1_fpn_640x640_coco17_tpu-8/saved_model'
-PATH_TO_SAVED_MODEL = './model/ssd_mobilenet_v2_320x320_coco17_tpu-8/saved_model'
+PATH_TO_SAVED_MODEL = './exported-models/ssd_mobilenet_v2_320x320_ball/saved_model'
 detect_fn = tf.saved_model.load(PATH_TO_SAVED_MODEL)
 
 end_time = time.time()
@@ -114,16 +114,16 @@ while(True):
     detection_classes = detections['detection_classes']
     detection_scores = detections['detection_scores']
 
-    detections = apply_non_max_suppression(detections, iou_thresh=0.3, score_thresh=0.4)
+    # detections = apply_non_max_suppression(detections, iou_thresh=0.3, score_thresh=0.4)
 
     # Remove anything other than sports ball
-    keep = np.ones(detection_classes.shape, dtype=bool)
-    for idx, val in enumerate(detection_classes):
-        if val != 37: # 37 = sports ball
-            keep[idx] = False
-    detection_boxes = detection_boxes[keep]
-    detection_classes = detection_classes[keep]
-    detection_scores = detection_scores[keep]
+    # keep = np.ones(detection_classes.shape, dtype=bool)
+    # for idx, val in enumerate(detection_classes):
+    #     if val != 37: # 37 = sports ball
+    #         keep[idx] = False
+    # detection_boxes = detection_boxes[keep]
+    # detection_classes = detection_classes[keep]
+    # detection_scores = detection_scores[keep]
 
     viz_utils.visualize_boxes_and_labels_on_image_array(
         image,
