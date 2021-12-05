@@ -14,6 +14,7 @@
 """Main script to run the object detection routine."""
 import argparse
 import sys
+import signal
 import time
 from collections import deque
 
@@ -28,10 +29,13 @@ import util
 
 def weighted_score(detection: Detection) -> float:
     box = detection.bounding_box
-    area = (box.right - box.left) * (box.bottom - box.top)
-    return area * detection.categories[0].score # Only one detection category
+    width = box.right - box.left
+    height = box.bottom - box.top
+    area = width * height
+    squareness = min(width, height) / max(width, height)
+    return area * squareness * detection.categories[0].score # Only one detection category
 
-def run(model: str, camera_id: int, width: int, height: int, num_threads: int) -> None:
+def run(model: str, camera_id: int, width: int, height: int, num_threads: int, output_file: str) -> None:
   """Continuously run inference on images acquired from the camera.
   Args:
     model: Name of the TFLite object detection model.
@@ -39,7 +43,7 @@ def run(model: str, camera_id: int, width: int, height: int, num_threads: int) -
     width: The width of the frame captured from the camera.
     height: The height of the frame captured from the camera.
     num_threads: The number of CPU threads to run the model.
-    enable_edgetpu: True/False whether the model is a EdgeTPU model.
+    output: File name of the recording output.
   """
 
   pth = PanTiltHat()
@@ -55,7 +59,10 @@ def run(model: str, camera_id: int, width: int, height: int, num_threads: int) -
   frame_times = deque([], fps_avg_frame_count)
 
   # Start capturing video input from the camera
-  cap = VideoStream(src=0, usePiCamera=True, resolution=(320,240), framerate=20).start()
+  cap = VideoStream(src=0, usePiCamera=True, resolution=(width,height), framerate=20).start()
+  codec = cv2.VideoWriter_fourcc(*'MJPG')
+  writer = cv2.VideoWriter(output_file, codec, 10, (width,height))
+  print(output_file)
 
   # Visualization parameters
   row_size = 20  # pixels
@@ -70,6 +77,15 @@ def run(model: str, camera_id: int, width: int, height: int, num_threads: int) -
       score_threshold=0.3,
       max_results=3)
   detector = ObjectDetector(model_path=model, options=options)
+
+  def signal_handler(sig, frame):
+    cap.stop()
+    writer.release()
+    # cv2.destroyAllWindows()
+    pth.shutdown()
+    sys.exit(0)
+
+  signal.signal(signal.SIGINT, signal_handler)
 
   # Continuously capture images from the camera and run inference
   while True:
@@ -99,9 +115,10 @@ def run(model: str, camera_id: int, width: int, height: int, num_threads: int) -
                 font_size, text_color, font_thickness)
 
     # Stop the program if the ESC key is pressed.
-    if cv2.waitKey(1) == 27:
-      break
-    cv2.imshow('object_detector', image)
+    # if cv2.waitKey(1) == 27:
+    #   break
+    # cv2.imshow('object_detector', image)
+    writer.write(image)
     detection = max(detections, key=weighted_score) if detections else None
     width = detection.bounding_box.right - detection.bounding_box.left if detections else None
     height = detection.bounding_box.bottom - detection.bounding_box.top if detections else None
@@ -109,7 +126,7 @@ def run(model: str, camera_id: int, width: int, height: int, num_threads: int) -
     y = detection.bounding_box.top + height / 2 if detections else None
     print(f'{fps_text}   x: {x}, y: {y}, w: {width}')
     if len(detections) > 1:
-      print(detections)
+      print(f'{detections} weighted_scores: {list(map(lambda x: round(weighted_score(x), 1), detections))}')
 
     if x is None:
       # Reset PID controllers if ball not found
@@ -117,17 +134,15 @@ def run(model: str, camera_id: int, width: int, height: int, num_threads: int) -
       pidTilt.set_auto_mode(False)
 
     else:
-      pidPan.set_auto_mode(True, last_output=0)
-      pidTilt.set_auto_mode(True, last_output=20)
+      pidPan.set_auto_mode(True, last_output=pidPan._last_output)
+      pidTilt.set_auto_mode(True, last_output=pidTilt._last_output)
       panAngle = pidPan(x)
       tiltAngle = pidTilt(240 - y)
-      print(f'panAngle: {panAngle}, tiltAngle: {tiltAngle}')
+      print(f'panAngle: {panAngle:.1f}, tiltAngle: {tiltAngle:.1f}')
       pth.pan(panAngle)
       pth.tilt(tiltAngle)
 
-
-  cap.stop()
-  cv2.destroyAllWindows()
+  signal_handler()
 
 
 def main():
@@ -158,10 +173,15 @@ def main():
       required=False,
       type=int,
       default=4)
+  parser.add_argument(
+      '--output',
+      help='File name of the recording output.',
+      required=False,
+      default='output.avi')
   args = parser.parse_args()
 
   run(args.model, int(args.cameraId), args.frameWidth, args.frameHeight,
-      int(args.numThreads))
+      int(args.numThreads), args.output)
 
 
 if __name__ == '__main__':
