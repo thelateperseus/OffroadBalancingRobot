@@ -1,48 +1,36 @@
-const int CHANNEL1_PIN = 2;
-const int CHANNEL2_PIN = 3;
+#include "RCChannel.h"
 
-volatile unsigned long channel1PulseStart = 0;
-volatile long channel1PulseDuration = 0;
-volatile unsigned long channel2PulseStart = 0;
-volatile long channel2PulseDuration = 0;
+const int CHANNEL1_PIN = 3;
+const int CHANNEL2_PIN = 2;
+
+RCChannel channel1 = RCChannel(CHANNEL1_PIN);
+RCChannel channel2 = RCChannel(CHANNEL2_PIN);
 
 void channel1Interrupt() {
-  boolean channel1 = digitalRead(CHANNEL1_PIN);
-  unsigned long now = micros();
-  if (channel1) {
-    channel1PulseStart = now;
-  } else {
-    channel1PulseDuration = now - channel1PulseStart;
-  }
+  channel1.handleInterrupt();
 }
 
 void channel2Interrupt() {
-  boolean channel2 = digitalRead(CHANNEL2_PIN);
-  unsigned long now = micros();
-  if (channel2) {
-    channel2PulseStart = now;
-  } else {
-    channel2PulseDuration = now - channel2PulseStart;
-  }
+  channel2.handleInterrupt();
 }
 
 void setup() {
   Serial.begin(115200);
-  while(!Serial);
-  pinMode(CHANNEL1_PIN, INPUT);
-  pinMode(CHANNEL2_PIN, INPUT);
+  while (!Serial);
   attachInterrupt(digitalPinToInterrupt(CHANNEL1_PIN), channel1Interrupt, CHANGE);
   attachInterrupt(digitalPinToInterrupt(CHANNEL2_PIN), channel2Interrupt, CHANGE);
 }
 
 void loop() {
+  long channel1PulseDuration = channel1.getPulseDuration();
+  long channel2PulseDuration = channel2.getPulseDuration();
   delay(20);
   Serial.print("x:");
   Serial.print(channel1PulseDuration);
   Serial.print(", y:");
   Serial.print(channel2PulseDuration);
   Serial.print(", t:");
-  Serial.print((channel1PulseDuration-1500)/10);
+  Serial.print((channel1PulseDuration - 1500) / 10);
 
   long steering = (channel2PulseDuration - 1500) / 10;
   steering = constrain(steering, -50, 50);

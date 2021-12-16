@@ -1,6 +1,7 @@
 #include "Encoder.h"
 #include "IMUFilter.h"
 #include "PID_v1.h"
+#include "RCChannel.h"
 #include <SAMD21turboPWM.h>
 #include "SerialCommand.h"
 #include "SpeedFilter.h"
@@ -68,12 +69,8 @@ SerialCommand cmd;
 IMUData imuData;
 IMUFilter imuFilter;
 
-volatile unsigned long rcChannel1PulseStart = 0;
-volatile long rcChannel1PulseDuration = 1500;
-volatile int rcChannel1SkipCount = 0;
-volatile unsigned long rcChannel2PulseStart = 0;
-volatile long rcChannel2PulseDuration = 1500;
-volatile int rcChannel2SkipCount = 0;
+RCChannel rcChannel1 = RCChannel(RC_CHANNEL1_PIN);
+RCChannel rcChannel2 = RCChannel(RC_CHANNEL2_PIN);
 
 /*---------
     Setup
@@ -151,37 +148,11 @@ void encoderRightInterruptB() {
 }
 
 void rcChannel1Interrupt() {
-  boolean rcChannel1 = digitalRead(RC_CHANNEL1_PIN);
-  unsigned long now = micros();
-  if (rcChannel1) {
-    rcChannel1PulseStart = now;
-  } else {
-    long duration = now - rcChannel1PulseStart;
-    // Ignore up to 2 consecutive spikes
-    if (abs(duration - rcChannel1PulseDuration) < 400 || rcChannel1SkipCount >= 2) {
-      rcChannel1PulseDuration = duration;
-      rcChannel1SkipCount = 0;
-    } else {
-      rcChannel1SkipCount += 1;
-    }
-  }
+  rcChannel1.handleInterrupt();
 }
 
 void rcChannel2Interrupt() {
-  boolean rcChannel2 = digitalRead(RC_CHANNEL2_PIN);
-  unsigned long now = micros();
-  if (rcChannel2) {
-    rcChannel2PulseStart = now;
-  } else {
-    long duration = now - rcChannel2PulseStart;
-    // Ignore up to 2 consecutive spikes
-    if (abs(duration - rcChannel2PulseDuration) < 400 || rcChannel2SkipCount >= 2) {
-      rcChannel2PulseDuration = duration;
-      rcChannel2SkipCount = 0;
-    } else {
-      rcChannel2SkipCount += 1;
-    }
-  }
+  rcChannel2.handleInterrupt();
 }
 
 void setup() {
@@ -219,8 +190,6 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(ENCODER_A_R), encoderRightInterruptA, CHANGE);
   attachInterrupt(digitalPinToInterrupt(ENCODER_B_R), encoderRightInterruptB, CHANGE);
 
-  pinMode(RC_CHANNEL1_PIN, INPUT);
-  pinMode(RC_CHANNEL2_PIN, INPUT);
   attachInterrupt(digitalPinToInterrupt(RC_CHANNEL1_PIN), rcChannel1Interrupt, CHANGE);
   attachInterrupt(digitalPinToInterrupt(RC_CHANNEL2_PIN), rcChannel2Interrupt, CHANGE);
 
@@ -300,6 +269,7 @@ void loop() {
     encoderRightValue = newEncoderRightValue;
 
     // Use RC controller to set speed
+    long rcChannel1PulseDuration = rcChannel1.getPulseDuration();
     if (rcChannel1PulseDuration > 100 &&
         (rcChannel1PulseDuration < 1450 || rcChannel1PulseDuration > 1550)) {
       long rcSpeed = (rcChannel1PulseDuration - 1500) / 32;
@@ -330,6 +300,7 @@ void loop() {
       Serial1.print(", ");*/
 
     // Use RC controller to turn
+    long rcChannel2PulseDuration = rcChannel2.getPulseDuration();
     if (rcChannel2PulseDuration > 100 &&
         (rcChannel2PulseDuration < 1450 || rcChannel2PulseDuration > 1550)) {
       directionPid.SetMode(MANUAL);
