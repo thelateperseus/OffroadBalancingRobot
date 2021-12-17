@@ -64,7 +64,8 @@ Encoder encoderLeft(ENCODER_A_L, ENCODER_B_L);
 Encoder encoderRight(ENCODER_A_R, ENCODER_B_R);
 SpeedFilter speedFilter;
 
-SerialCommand cmd;
+SerialCommand bluetoothCmd;
+SerialCommand serialCmd;
 
 IMUData imuData;
 IMUFilter imuFilter;
@@ -72,12 +73,16 @@ IMUFilter imuFilter;
 RCChannel rcChannel1 = RCChannel(RC_CHANNEL1_PIN);
 RCChannel rcChannel2 = RCChannel(RC_CHANNEL2_PIN);
 
+volatile double serialSpeed;
+volatile double serialSteering;
+unsigned long serialCommandExpiryTime;
+
 /*---------
     Setup
   ---------*/
 
 void setKpp() {
-  char* arg = cmd.next();
+  char* arg = bluetoothCmd.next();
   if (arg != NULL) {
     kpp = atof(arg);
     pitchPid.SetTunings(kpp, kip, kdp);
@@ -85,7 +90,7 @@ void setKpp() {
 }
 
 void setKip() {
-  char* arg = cmd.next();
+  char* arg = bluetoothCmd.next();
   if (arg != NULL) {
     kip = atof(arg);
     pitchPid.SetTunings(kpp, kip, kdp);
@@ -93,7 +98,7 @@ void setKip() {
 }
 
 void setKdp() {
-  char* arg = cmd.next();
+  char* arg = bluetoothCmd.next();
   if (arg != NULL) {
     kdp = atof(arg);
     pitchPid.SetTunings(kpp, kip, kdp);
@@ -101,7 +106,7 @@ void setKdp() {
 }
 
 void setKps() {
-  char* arg = cmd.next();
+  char* arg = bluetoothCmd.next();
   if (arg != NULL) {
     kps = atof(arg);
     speedPid.SetTunings(kps, kis, kds);
@@ -109,7 +114,7 @@ void setKps() {
 }
 
 void setKis() {
-  char* arg = cmd.next();
+  char* arg = bluetoothCmd.next();
   if (arg != NULL) {
     kis = atof(arg);
     speedPid.SetTunings(kps, kis, kds);
@@ -117,7 +122,7 @@ void setKis() {
 }
 
 void setKds() {
-  char* arg = cmd.next();
+  char* arg = bluetoothCmd.next();
   if (arg != NULL) {
     kds = atof(arg);
     speedPid.SetTunings(kps, kis, kds);
@@ -125,7 +130,7 @@ void setKds() {
 }
 
 void setDeadband() {
-  char* arg = cmd.next();
+  char* arg = bluetoothCmd.next();
   if (arg != NULL) {
     motorDeadBand = atof(arg);
   }
@@ -155,18 +160,31 @@ void rcChannel2Interrupt() {
   rcChannel2.handleInterrupt();
 }
 
+void receiveSerialCommand(const char* arg1) {
+  if (arg1 != NULL) {
+    char* arg2 = serialCmd.next();
+    if (arg2 != NULL) {
+      serialSpeed = constrain(atof(arg1), -5, 5);
+      serialSteering = constrain(atof(arg2), -40, 40);
+      serialCommandExpiryTime = millis() + 300;
+    }
+  }
+}
+
 void setup() {
-  //Serial.begin(115200);
+  Serial.begin(115200);
   //while (!Serial); // Nano 33 will lose initial output without this
   Serial1.begin(115200);
 
-  cmd.addCommand("kpp", setKpp);
-  cmd.addCommand("kip", setKip);
-  cmd.addCommand("kdp", setKdp);
-  cmd.addCommand("kps", setKps);
-  cmd.addCommand("kis", setKis);
-  cmd.addCommand("kds", setKds);
-  cmd.addCommand("db", setDeadband);
+  bluetoothCmd.addCommand("kpp", setKpp);
+  bluetoothCmd.addCommand("kip", setKip);
+  bluetoothCmd.addCommand("kdp", setKdp);
+  bluetoothCmd.addCommand("kps", setKps);
+  bluetoothCmd.addCommand("kis", setKis);
+  bluetoothCmd.addCommand("kds", setKds);
+  bluetoothCmd.addCommand("db", setDeadband);
+
+  serialCmd.setDefaultHandler(receiveSerialCommand);
 
   //Serial.println("Initializing IMU...");
   imuFilter.initialise();
@@ -239,7 +257,14 @@ void reset() {
 }
 
 void loop() {
-  cmd.readSerial(&Serial1);
+  serialCmd.readSerial(&Serial);
+  bluetoothCmd.readSerial(&Serial1);
+
+  if (serialCommandExpiryTime > 0 && millis() > serialCommandExpiryTime) {
+    serialSpeed = 0;
+    serialSteering = 0;
+    serialCommandExpiryTime = 0;
+  }
 
   imuFilter.getFilteredAngle(imuData);
 
@@ -299,28 +324,34 @@ void loop() {
       Serial1.print(directionReading);
       Serial1.print(", ");*/
 
-    // Use RC controller to turn
+    // Use RC controller or Serial command from Pi to turn
+    long steering = 0;
     long rcChannel2PulseDuration = rcChannel2.getPulseDuration();
     if (rcChannel2PulseDuration > 100 &&
         (rcChannel2PulseDuration < 1450 || rcChannel2PulseDuration > 1550)) {
+      steering = (rcChannel2PulseDuration - 1500) / 4;
+      steering = constrain(steering, -120, 120);
+    } else if (serialSteering != 0) {
+      steering = constrain(serialSteering, -40, 40);
+    }
+
+    if (steering != 0) {
       directionPid.SetMode(MANUAL);
       directionSetPoint = directionReading;
       directionPidOutput = 0;
-      long steering = (rcChannel2PulseDuration - 1500) / 4;
-      steering = constrain(steering, -120, 120);
       pwmLeft -= steering;
       pwmRight += steering;
-      /*Serial1.print("st:");
-        Serial1.print(steering);
-        Serial1.print(", ");*/
+      Serial1.print("st:");
+      Serial1.print(steering);
+      Serial1.print(", ");
     } else {
       directionPid.SetMode(AUTOMATIC);
       directionPid.Compute();
       pwmLeft += directionPidOutput;
       pwmRight -= directionPidOutput;
-      /*Serial1.print("st:");
-        Serial1.print(directionPidOutput);
-        Serial1.print(", ");*/
+      Serial1.print("st:");
+      Serial1.print(directionPidOutput);
+      Serial1.print(", ");
     }
 
     boolean directionLeft = pwmLeft > 0;
@@ -328,14 +359,14 @@ void loop() {
     pwmLeft = map(abs(pwmLeft), 0.0, 1000.0, motorDeadBand + 1, 1000.0);
     pwmRight = map(abs(pwmRight), 0.0, 1000.0, motorDeadBand, 1000.0);
 
-    Serial1.print("sp:");
-    Serial1.print(pitchSetPoint);
-    Serial1.print(", pv:");
-    Serial1.print(pitchReading);
+    //    Serial1.print("sp:");
+    //    Serial1.print(pitchSetPoint);
+    //    Serial1.print(", pv:");
+    //    Serial1.print(pitchReading);
     Serial1.print(", ssp:");
     Serial1.print(speedSetPoint);
-    Serial1.print(", s:");
-    Serial1.print(overallSpeed);
+    //    Serial1.print(", s:");
+    //    Serial1.print(overallSpeed);
     Serial1.print(", fs:");
     Serial1.print(filteredSpeed);
     Serial1.println();

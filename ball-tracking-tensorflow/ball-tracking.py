@@ -14,6 +14,7 @@
 """Main script to run the object detection routine."""
 import argparse
 import sys
+import serial
 import signal
 import time
 from collections import deque
@@ -26,6 +27,8 @@ from imutils.video import VideoStream
 from pan_tilt_hat import PanTiltHat
 from simple_pid import PID
 import util
+
+arduino = serial.Serial(port='/dev/ttyACM0', baudrate=115200, timeout=0.001)
 
 def weighted_score(detection: Detection) -> float:
     box = detection.bounding_box
@@ -52,6 +55,7 @@ def run(model: str, camera_id: int, width: int, height: int, num_threads: int, o
 
   pidPan = PID(0.1, 0.5, 0.0, setpoint=160, sample_time=None, output_limits=(-75, 75), auto_mode=False)
   pidTilt = PID(0.075, 0.375, 0.0, setpoint=120, sample_time=None, output_limits=(-75, 30), auto_mode=False)
+  pidSteering = PID(2, 0, 0.0, setpoint=0, sample_time=None, output_limits=(-30, 30), auto_mode=False)
 
   # Variables to calculate FPS
   start_time = time.time()
@@ -132,15 +136,21 @@ def run(model: str, camera_id: int, width: int, height: int, num_threads: int, o
       # Reset PID controllers if ball not found
       pidPan.set_auto_mode(False)
       pidTilt.set_auto_mode(False)
+      pidSteering.set_auto_mode(False)
 
     else:
       pidPan.set_auto_mode(True, last_output=pidPan._last_output)
       pidTilt.set_auto_mode(True, last_output=pidTilt._last_output)
+      pidSteering.set_auto_mode(True, last_output=0)
       panAngle = pidPan(x)
       tiltAngle = pidTilt(240 - y)
-      print(f'panAngle: {panAngle:.1f}, tiltAngle: {tiltAngle:.1f}')
+      steeringValue = pidSteering(panAngle)
+      speedValue = 0
+      print(f'panAngle: {panAngle:.1f}, tiltAngle: {tiltAngle:.1f}, speed: {speedValue:.1f}, steering: {steeringValue:.1f}')
       pth.pan(panAngle)
       pth.tilt(tiltAngle)
+      serialCommand = f'{speedValue:.1f} {steeringValue:.1f}\r\n'
+      arduino.write(bytes(serialCommand, 'utf-8'))
 
   signal_handler()
 
