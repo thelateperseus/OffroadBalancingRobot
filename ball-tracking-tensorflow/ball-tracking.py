@@ -56,7 +56,7 @@ def run(model: str, camera_id: int, width: int, height: int, num_threads: int, o
   pidPan = PID(0.1, 0.5, 0.0, setpoint=160, sample_time=None, output_limits=(-75, 75), auto_mode=False)
   pidTilt = PID(0.075, 0.375, 0.0, setpoint=120, sample_time=None, output_limits=(-75, 30), auto_mode=False)
   pidSteering = PID(1.5, 0.25, 0.0, setpoint=0, sample_time=None, output_limits=(-60, 60), auto_mode=False)
-  pidSpeed = PID(0.5, 0, 0.0, setpoint=40, sample_time=None, output_limits=(-5, 5), auto_mode=False)
+  pidSpeed = PID(0.2, 0, 0.0, setpoint=40, sample_time=None, output_limits=(-5, 5), auto_mode=False)
 
   # Variables to calculate FPS
   start_time = time.time()
@@ -144,11 +144,15 @@ def run(model: str, camera_id: int, width: int, height: int, num_threads: int, o
       pidPan.set_auto_mode(True, last_output=pidPan._last_output)
       pidTilt.set_auto_mode(True, last_output=pidTilt._last_output)
       pidSteering.set_auto_mode(True, last_output=0)
-      pidSpeed.set_auto_mode(True, last_output=0)
       panAngle = pidPan(x)
       tiltAngle = pidTilt(240 - y)
       steeringValue = -pidSteering(panAngle)
-      speedValue = pidSpeed(width)
+      if (abs(panAngle) < 5):
+        pidSpeed.set_auto_mode(True, last_output=0)
+        speedValue = pidSpeed(width)
+      else:
+        pidSpeed.set_auto_mode(False)
+        speedValue = 0
       print(f'panAngle: {panAngle:.1f}, tiltAngle: {tiltAngle:.1f}, speed: {speedValue:.1f}, steering: {steeringValue:.1f}')
       pth.pan(panAngle)
       pth.tilt(tiltAngle)
