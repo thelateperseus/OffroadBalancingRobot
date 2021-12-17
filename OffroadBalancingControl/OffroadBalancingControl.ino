@@ -299,6 +299,8 @@ void loop() {
         (rcChannel1PulseDuration < 1450 || rcChannel1PulseDuration > 1550)) {
       long rcSpeed = (rcChannel1PulseDuration - 1500) / 32;
       speedSetPoint = constrain(rcSpeed, -15, 15);
+    } else if (serialSpeed != 0) {
+      speedSetPoint = constrain(serialSpeed, -5, 5);
     } else {
       speedSetPoint = 0;
     }
@@ -332,7 +334,7 @@ void loop() {
       steering = (rcChannel2PulseDuration - 1500) / 4;
       steering = constrain(steering, -120, 120);
     } else if (serialSteering != 0) {
-      steering = constrain(serialSteering, -40, 40);
+      steering = constrain(serialSteering, -60, 60);
     }
 
     if (steering != 0) {
@@ -343,7 +345,7 @@ void loop() {
       pwmRight += steering;
       Serial1.print("st:");
       Serial1.print(steering);
-      Serial1.print(", ");
+      // Serial1.print(", ");
     } else {
       directionPid.SetMode(AUTOMATIC);
       directionPid.Compute();
@@ -351,7 +353,7 @@ void loop() {
       pwmRight -= directionPidOutput;
       Serial1.print("st:");
       Serial1.print(directionPidOutput);
-      Serial1.print(", ");
+      // Serial1.print(", ");
     }
 
     boolean directionLeft = pwmLeft > 0;
