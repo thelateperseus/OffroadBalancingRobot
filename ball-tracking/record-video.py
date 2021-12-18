@@ -11,7 +11,8 @@ pth = PanTiltHat()
 pth.pan(0)
 pth.tilt(20)
 
-vs = VideoStream(src=0, usePiCamera=True, resolution=(320,240), framerate=25).start()
+vs = VideoStream(src=0, usePiCamera=True, resolution=(320, 240),
+                 framerate=25).start()
 
 # allow the camera to warm up
 time.sleep(2.0)
@@ -19,7 +20,8 @@ time.sleep(2.0)
 #codec = cv2.VideoWriter_fourcc(*'mp4v')
 #out = cv2.VideoWriter("output.mp4", codec, 25, (320,240))
 codec = cv2.VideoWriter_fourcc(*'MJPG')
-out = cv2.VideoWriter("output.avi", codec, 25, (320,240))
+out = cv2.VideoWriter("output.avi", codec, 25, (320, 240))
+
 
 def signal_handler(sig, frame):
     vs.stop()
@@ -27,6 +29,7 @@ def signal_handler(sig, frame):
     cv2.destroyAllWindows()
     pth.shutdown()
     sys.exit(0)
+
 
 signal.signal(signal.SIGINT, signal_handler)
 

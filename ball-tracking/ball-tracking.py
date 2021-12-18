@@ -13,15 +13,25 @@ pth = PanTiltHat()
 pth.pan(0)
 pth.tilt(20)
 
-pidPan = PID(0.1, 0.5, 0.0, setpoint=160, sample_time=None, output_limits=(-75, 75), auto_mode=False)
-pidTilt = PID(0.075, 0.375, 0.0, setpoint=120, sample_time=None, output_limits=(-75, 30), auto_mode=False)
+pidPan = PID(0.1,
+             0.5,
+             0.0,
+             setpoint=160,
+             sample_time=None,
+             output_limits=(-75, 75),
+             auto_mode=False)
+pidTilt = PID(0.075,
+              0.375,
+              0.0,
+              setpoint=120,
+              sample_time=None,
+              output_limits=(-75, 30),
+              auto_mode=False)
 
 # construct the argument parse and parse the arguments
 ap = argparse.ArgumentParser()
-ap.add_argument("-v", "--video",
-    help="path to the (optional) video file")
-ap.add_argument("-b", "--buffer", type=int, default=64,
-    help="max buffer size")
+ap.add_argument("-v", "--video", help="path to the (optional) video file")
+ap.add_argument("-b", "--buffer", type=int, default=64, help="max buffer size")
 args = vars(ap.parse_args())
 
 # define the lower and upper boundaries of the "pink"
@@ -29,14 +39,17 @@ args = vars(ap.parse_args())
 # list of tracked points
 #pinkLower = (117,93,0)
 #pinkUpper = (196,209,134)
-pinkLower = (117,85,0)
-pinkUpper = (175,209,255)
+pinkLower = (117, 85, 0)
+pinkUpper = (175, 209, 255)
 pts = deque(maxlen=args["buffer"])
 
 # if a video path was not supplied, grab the reference
 # to the webcam
 if not args.get("video", False):
-    vs = VideoStream(src=0, usePiCamera=True, resolution=(320,240), framerate=20).start()
+    vs = VideoStream(src=0,
+                     usePiCamera=True,
+                     resolution=(320, 240),
+                     framerate=20).start()
 
 # otherwise, grab a reference to the video file
 else:
@@ -62,8 +75,8 @@ while True:
 
     # resize the frame, blur it, and convert it to the HSV
     #
-	#  color space
-    #frame = imutils.resize(frame, width=600)
+#  color space
+#frame = imutils.resize(frame, width=600)
     blurred = cv2.GaussianBlur(frame, (11, 11), 0)
     hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
 
@@ -77,7 +90,7 @@ while True:
     # find contours in the mask and initialize the current
     # (x, y) center of the ball
     cnts = cv2.findContours(mask.copy(), cv2.RETR_EXTERNAL,
-        cv2.CHAIN_APPROX_SIMPLE)
+                            cv2.CHAIN_APPROX_SIMPLE)
     cnts = imutils.grab_contours(cnts)
     center = None
     radius = None
@@ -91,14 +104,15 @@ while True:
         ((x, y), radius) = cv2.minEnclosingCircle(c)
         M = cv2.moments(c)
         centre = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))
-        print(f'time: {time.time() - startTime:.3f}, centre: {centre}, radius: {radius:.2f}')
+        print(
+            f'time: {time.time() - startTime:.3f}, centre: {centre}, radius: {radius:.2f}'
+        )
 
         # only proceed if the radius meets a minimum size
         if radius > 5:
             # draw the circle and centroid on the frame,
             # then update the list of tracked points
-            cv2.circle(frame, (int(x), int(y)), int(radius),
-                (0, 255, 255), 2)
+            cv2.circle(frame, (int(x), int(y)), int(radius), (0, 255, 255), 2)
             cv2.circle(frame, centre, 5, (0, 0, 255), -1)
 
         else:
