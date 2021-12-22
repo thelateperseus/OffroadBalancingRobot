@@ -17,9 +17,11 @@ import sys
 import serial
 import signal
 import time
+from datetime import datetime
 from collections import deque
 
 import cv2
+import numpy as np
 from object_detector import Detection
 from object_detector import ObjectDetector
 from object_detector import ObjectDetectorOptions
@@ -130,7 +132,6 @@ def run(
     def signal_handler(sig, frame):
         cap.stop()
         writer.release()
-        # cv2.destroyAllWindows()
         pth.shutdown()
         sys.exit(0)
 
@@ -138,16 +139,18 @@ def run(
 
     # Continuously capture images from the camera and run inference
     while True:
-        image = cap.read()
-        if image is None:
+        raw_image = cap.read()
+        if raw_image is None:
             # allow the camera or video file to warm up
+            print(f"{datetime.now():%H:%M:%S.%f} No image")
             time.sleep(0.1)
             continue
 
         # Run object detection estimation using the model.
-        detections = detector.detect(image)
+        detections = detector.detect(raw_image)
 
         # Draw keypoints and edges on input image
+        image = np.copy(raw_image)
         image = util.visualize(image, detections)
 
         # Calculate the FPS
@@ -171,9 +174,6 @@ def run(
         )
 
         # Stop the program if the ESC key is pressed.
-        # if cv2.waitKey(1) == 27:
-        #   break
-        # cv2.imshow('object_detector', image)
         writer.write(image)
         detection = max(detections, key=weighted_score) if detections else None
         width = (detection.bounding_box.right -
@@ -182,10 +182,11 @@ def run(
                   detection.bounding_box.top if detections else None)
         x = detection.bounding_box.left + width / 2 if detections else None
         y = detection.bounding_box.top + height / 2 if detections else None
-        print(f"{fps_text}   x: {x}, y: {y}, w: {width}")
+
+        print(f"{datetime.now():%H:%M:%S.%f} {fps_text}   x: {x}, y: {y}, w: {width}")
         if len(detections) > 1:
             print(
-                f"{detections} weighted_scores: {list(map(lambda x: round(weighted_score(x), 1), detections))}"
+                f"{datetime.now():%H:%M:%S.%f} {detections} weighted_scores: {list(map(lambda x: round(weighted_score(x), 1), detections))}"
             )
 
         if x is None:
@@ -209,14 +210,12 @@ def run(
                 pidSpeed.set_auto_mode(False)
                 speedValue = 0
             print(
-                f"panAngle: {panAngle:.1f}, tiltAngle: {tiltAngle:.1f}, speed: {speedValue:.1f}, steering: {steeringValue:.1f}"
+                f"{datetime.now():%H:%M:%S.%f} panAngle: {panAngle:.1f}, tiltAngle: {tiltAngle:.1f}, speed: {speedValue:.1f}, steering: {steeringValue:.1f}"
             )
             pth.pan(panAngle)
             pth.tilt(tiltAngle)
             serialCommand = f"{speedValue:.1f} {steeringValue:.1f}\r\n"
             arduino.write(bytes(serialCommand, "utf-8"))
-
-    signal_handler()
 
 
 def main():
