@@ -13,9 +13,11 @@
 # limitations under the License.
 """Main script to run the object detection routine."""
 import argparse
+import queue
 import sys
 import serial
 import signal
+import threading
 import time
 from datetime import datetime
 from collections import deque
@@ -25,7 +27,6 @@ import numpy as np
 from object_detector import Detection
 from object_detector import ObjectDetector
 from object_detector import ObjectDetectorOptions
-from imutils.video import VideoStream
 from pan_tilt_hat import PanTiltHat
 from simple_pid import PID
 import util
@@ -41,6 +42,35 @@ def weighted_score(detection: Detection) -> float:
     squareness = min(width, height) / max(width, height)
     # Only one detection category
     return (area * squareness * detection.categories[0].score)
+
+
+# bufferless VideoCapture
+class VideoCapture:
+    def __init__(self, name, width, height):
+        self.cap = cv2.VideoCapture(name)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+        self.cap.set(cv2.CAP_PROP_FPS, 11)
+        self.q = queue.Queue()
+        t = threading.Thread(target=self._reader)
+        t.daemon = True
+        t.start()
+
+    # read frames as soon as they are available, keeping only most recent one
+    def _reader(self):
+        while True:
+            ret, frame = self.cap.read()
+            if not ret:
+                break
+            if not self.q.empty():
+                try:
+                    self.q.get_nowait()  # discard previous (unprocessed) frame
+                except queue.Empty:
+                    pass
+            self.q.put(frame)
+
+    def read(self):
+        return self.q.get()
 
 
 def run(
@@ -103,15 +133,12 @@ def run(
     )
 
     # Variables to calculate FPS
-    start_time = time.time()
+    start_time = time.perf_counter()
     fps_avg_frame_count = 10
     frame_times = deque([], fps_avg_frame_count)
 
     # Start capturing video input from the camera
-    cap = VideoStream(src=0,
-                      usePiCamera=True,
-                      resolution=(width, height),
-                      framerate=20).start()
+    cap = VideoCapture(camera_id, width, height)
     codec = cv2.VideoWriter_fourcc(*"MJPG")
     writer = cv2.VideoWriter(output_file, codec, 10, (width, height))
     print(output_file)
@@ -130,7 +157,6 @@ def run(
     detector = ObjectDetector(model_path=model, options=options)
 
     def signal_handler(sig, frame):
-        cap.stop()
         writer.release()
         pth.shutdown()
         sys.exit(0)
@@ -139,26 +165,25 @@ def run(
 
     # Continuously capture images from the camera and run inference
     while True:
-        raw_image = cap.read()
-        if raw_image is None:
+        image = cap.read()
+        if image is None:
             # allow the camera or video file to warm up
             print(f"{datetime.now():%H:%M:%S.%f} No image")
             time.sleep(0.1)
             continue
 
         # Run object detection estimation using the model.
-        detections = detector.detect(raw_image)
+        detections = detector.detect(image)
 
         # Draw keypoints and edges on input image
-        image = np.copy(raw_image)
         image = util.visualize(image, detections)
 
         # Calculate the FPS
-        end_time = time.time()
+        end_time = time.perf_counter()
         frame_times.append(end_time - start_time)
         avg_frame_time = sum(frame_times) / len(frame_times)
         fps = 1.0 / avg_frame_time
-        start_time = time.time()
+        start_time = time.perf_counter()
 
         # Show the FPS
         fps_text = "{:2.1f} FPS".format(fps)
@@ -183,7 +208,9 @@ def run(
         x = detection.bounding_box.left + width / 2 if detections else None
         y = detection.bounding_box.top + height / 2 if detections else None
 
-        print(f"{datetime.now():%H:%M:%S.%f} {fps_text}   x: {x}, y: {y}, w: {width}")
+        print(
+            f"{datetime.now():%H:%M:%S.%f} {fps_text}   x: {x}, y: {y}, w: {width}"
+        )
         if len(detections) > 1:
             print(
                 f"{datetime.now():%H:%M:%S.%f} {detections} weighted_scores: {list(map(lambda x: round(weighted_score(x), 1), detections))}"
@@ -216,6 +243,8 @@ def run(
             pth.tilt(tiltAngle)
             serialCommand = f"{speedValue:.1f} {steeringValue:.1f}\r\n"
             arduino.write(bytes(serialCommand, "utf-8"))
+
+    signal_handler()
 
 
 def main():
